@@ -1,0 +1,10 @@
+This project contains both software and hardware components.
+
+- Software components are licensed under AGPL-3.0
+  See the software/LICENSE-AGPL-3.0.txt file for the full text.
+
+- Hardware design files are licensed under CERN-OHL-S-2.0
+  See the hardware/LICENSE-CERN-OHL-S-2.0.txt file for the full text.
+
+You are free to use, modify, and distribute both software and hardware,
+as long as you comply with the terms of their respective licenses.
