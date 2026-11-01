@@ -223,9 +223,24 @@ that inductance, i.e. **shifts the gain**. Skin depth in aluminium at ~100 kHz i
 conductivity varies ~0.4%/°C, so a fixed geometry becomes a **temperature-dependent gain
 drift** — the class of error calibration handles worst.
 
-- [ ] **VERIFY before committing to the housing.** Bring an aluminium plate toward the
-      Rev A board and log the gain vs. distance. Check the PNI manual for guidance on
-      nearby non-ferrous metal. This is reasoning from physics, not a cited spec.
+**Status: unverified.** This is reasoning from physics, not a cited spec. **Rev A was
+never fabricated**, so there is no existing hardware to test against. Three ways to
+resolve it:
+
+- [ ] **(a) Cheapest — buy one assembled RM3100 breakout** alongside the Phase 2 parts
+      order (GNSS.store ELT0327 ~€35, or a cavedevice kit on a scrap board). Log gain vs.
+      distance to an aluminium plate, and gain vs. temperature with the plate fixed. ~€35
+      and no design work, and the same board doubles as a target for early calibration-
+      firmware development.
+- [ ] **(b) Check the PNI sensor suite manual** for guidance on nearby non-ferrous metal.
+      Free, and may settle it outright.
+- [ ] **(c) Design around it — the conservative default.** Build the hybrid housing
+      (non-conductive nose) regardless. The POM/PEEK nose is a non-structural cover, so
+      it costs little and removes the risk without needing the answer.
+
+**Recommended: (b), then (c), with (a) if you want the number.** Do not defer this to
+Rev B bring-up *and* commit to a one-piece aluminium housing — if H1 is real, a
+single-billet chassis is unfixable, whereas the hybrid is cheap insurance either way.
 
 ### Why machined, quantitatively
 
