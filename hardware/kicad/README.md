@@ -330,10 +330,11 @@ The RM3100 is a **discrete chipset, not a single package**:
 | Magnetometer | **PNI RM3100 sensor suite** | **3 sets** | No better option exists. 3 sets = spatial gradiometer + voting |
 | Accelerometer | **Murata SCA3300-D01**, Mode 4 | **2** | 0.15 mg RMS, damped element, self-diagnostics. `\|a\|=1g` is a built-in third vote |
 | Gyro (optional) | **TDK ICM-42688-P** | 1 | Short attitude transfer + motion gating only |
-| Temp at mag coils | **Pt1000 thin-film RTD** | 3 | Platinum + ceramic is genuinely non-magnetic, unlike any IC leadframe |
-| Temp at accel | **TI TMP117** | 2 | ±0.1 °C, which is what accel temp-comp needs |
+| Temp at mag coils | **Pt1000 RTD, non-magnetic package** | 3 | The platinum *element* is non-magnetic; **SMD thin-film RTDs often have Ni-barrier terminations** — specify verified non-magnetic terminations or a leaded element. Compensates **gain** tempco only: the MagI2C has no temperature sensor, and PNI states offset is drift-free |
+| Temp at accel | **SCA3300 internal die sensor** (TMP117 ×0–1 as board reference only) | — | 18.9 LSB/°C → **0.053 °C resolution**, read in the same SPI frame. Its ±10 °C *absolute* offset is irrelevant — compensation uses a per-unit curve against the reported value. Die temperature is the **correct** variable; an external sensor lags and misses package gradients |
 | MCU | **STM32U585 (LQFP64/QFN64)** | 1 | see below |
-| Regulator | **Low-noise LDO** (TPS7A20 class) | 1 | **Never a buck** — switching current near a magnetometer is a field source |
+| Regulator | **Low-noise LDO** (TPS7A20 class), **EN pin = `/EN`** | 1 | **Never a buck** — switching current near a magnetometer is a field source. Replaces Rev A's PMOS gate. Split AVDD/DVDD with a **ferrite bead from the same rail** — the MagI2C's 0.1 V tracking rule forbids separate regulators |
+| Protection | **USB-C ESD array** (TPD4E05U06 class) + **TVS on 5 V in** | 1 + 1 | Both at the rear, both silicon — no magnetic concern. Previously missing |
 | Decoupling at coils | **Non-magnetic MLCC** (Cu/Ag termination) | — | Standard MLCCs have ferromagnetic Ni barrier terminations |
 
 **Dropped:** SCHA63T (€200 for gyro performance that contributes nothing to static
@@ -376,6 +377,17 @@ The ADXL355's lower noise density buys nothing, because the design is not noise-
 error on the axis *along* the sight line. So mount each SCA3300 with **the sight axis on
 X or Y, never Z** — a free 1.5× on the budget's largest term.
 
+**Refinement — rotate the pair.** That rule is right for normal legs, but on a steep pitch
+shot the *perpendicular* axes dominate the inclination error, and one of them must be Z.
+Mount the two SCA3300s **rotated 90° about the sight axis** relative to each other: every
+shot geometry then has at least one sensor with good axes in the critical direction, and
+any common-mode bias becomes a visible disagreement instead of a shared error. Costs
+nothing; calibration absorbs the frames.
+
+**Temperature comes from the die.** The SCA3300's internal sensor (18.9 LSB/°C,
+0.053 °C resolution) is read in the same SPI frame and measures what the MEMS actually
+experiences. Use it for compensation; an external TMP117 is redundant for this purpose.
+
 ### MCU: STM32U585
 
 The F401 is functionally adequate but wrong for this instrument.
@@ -385,7 +397,7 @@ The F401 is functionally adequate but wrong for this instrument.
 | Core | Cortex-M4F @ 84 MHz | Cortex-M33 @ 160 MHz, DSP, FPU, TrustZone |
 | Flash | 512 KB | **2 MB, dual-bank** |
 | SRAM | 96 KB | **786 KB** |
-| Power class | performance line | **ultra-low-power, <30 µA/MHz**, internal SMPS ("Q" parts) |
+| Power class | performance line | **ultra-low-power, <30 µA/MHz**. **Non-Q variant (LDO mode)** — the "Q" part's internal SMPS is a switching regulator with an on-board inductor, which the no-buck rule forbids; its run-mode saving is moot because the core sleeps (LPBAM) during integration |
 | Autonomous DMA | — | **LPBAM** |
 
 - **786 KB SRAM** makes the full 56-shot nonlinear least-squares calibration solve
@@ -409,7 +421,7 @@ The F401 is functionally adequate but wrong for this instrument.
 > consumer of both.
 
 **TPL5010:** keep only if the module wakes itself. The carrier board already owns power
-gating via the `/EN` PMOS, so if the carrier owns the duty cycle, drop the timer.
+gating via `/EN` (now the LDO's EN pin), so if the carrier owns the duty cycle, drop the timer.
 
 ---
 
@@ -440,8 +452,10 @@ Scale reference: **10 mA at 10 mm ≈ 200 nT**. Against 20 µT horizontal that i
    3-axis read is ~5 ms, so three sequential sets is ~15 ms; hand tremor over 15 ms is
    negligible, so the gradient measurement stays valid.
 6. **LDO, never a switching regulator.**
-7. **Crystal far from the coils, or drop it** — the can lid is typically ferromagnetic,
-   and SPI does not need better than the internal oscillator.
+7. **No crystal at all.** The can lid is typically ferromagnetic, and nothing needs one:
+   SPI runs from the internal oscillator, **USB FS runs crystal-free on HSI48 + CRS**, and
+   the **carrier owns wall-clock time** (it has BLE/phone) and sends it at power-up — the
+   module keeps relative time only, so no RTC crystal either.
 8. **Quiesce the board during the read** — LEDs off, no SPI traffic at the sampling
    instant. A constant current is calibratable; a blinking one is not.
 
@@ -630,7 +644,7 @@ None of these come from a phone alone.
   field in the sensor frame but not the offset, which separates the two. This is exactly
   what the 4-roll-angle DistoX procedure exploits.
 - **Temperature coefficients.** A cooler with ice packs plus a low oven gives 3 points
-  across 0–30 °C, with the TMP117 / Pt1000 logging actual temperature. Crude but
+  across 0–30 °C, with the SCA3300 die sensor / Pt1000 logging actual temperature. Crude but
   sufficient.
 
 ---

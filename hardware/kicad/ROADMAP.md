@@ -19,9 +19,9 @@ the module depends on, not a design. See also
 | Rev B approach | **Full 3× board directly**, no 1× prototype | Risk shifted into the design — see [Risk register](#risk-register) |
 | Magnetometer | 3× PNI RM3100 sensor suite | Gradiometry + voting |
 | Accelerometer | 2× Murata SCA3300-D01, Mode 4 | `\|a\|=1g` is a free third vote |
-| MCU | STM32U585, "Q" suffix | **On-device calibration is a requirement, not a fallback** |
+| MCU | STM32U585, **non-Q (LDO mode)** | **On-device calibration is a requirement, not a fallback.** The "Q" SMPS is a switching regulator on the board — forbidden by the no-buck rule, and moot since the core sleeps during integration |
 | Gyro | 1× TDK ICM-42688-P | Motion gating only, not azimuth |
-| Dropped | SCHA63T, DRV425, ADXL355, LM94021, crystal | Reasons in README |
+| Dropped | SCHA63T, DRV425, ADXL355, LM94021, crystal, **2× TMP117**, **PMOS `/EN` gate (Q1)** | Reasons in README. TMP117: the SCA3300 die sensor is the correct compensation source. PMOS: the LDO's EN pin does the job |
 | 3D scan / LiDAR integration | **Parked** | Carrier-level feature, needs no module changes |
 | Smartphone | **Bench tool + reference source only** | Magnetic screening and IGRF/solar lookup. **No app to be written** — on-device solving makes it redundant, and the cave ecosystem is Android |
 | Surface finish | Immersion silver or OSP — **never ENIG** | Nickel is ferromagnetic |
@@ -176,7 +176,7 @@ Dowels must be **non-magnetic** — brass or ceramic.
 | 5 V | carrier → AHRS | power |
 | GND | — | — |
 | UART TX / RX | bidirectional | commands + shot data |
-| `/EN` | carrier → AHRS | power gate (keep Rev A's PMOS) |
+| `/EN` | carrier → AHRS | power gate — **drives the LDO's EN pin**; Rev A's PMOS (Q1) is dropped |
 | `QUIET` | **AHRS → carrier** | open-drain, asserted during magnetic integration |
 
 Six signals on an **8-pin FFC** (two spares). A flex with adjacent ground also fixes the
@@ -388,6 +388,13 @@ distance, but inline avoids the complexity.
       there.
 - [ ] Confirm the assembler can use **halide-free solder paste** — PNI requires it for the
       sensor coils, for both reflow and cleaning. Non-negotiable and easy to miss.
+- [ ] **Pt1000 ×3 in a verified non-magnetic package.** SMD thin-film RTDs typically carry
+      Ni-barrier terminations like MLCCs — the platinum element is clean, the package may
+      not be. Leaded element or confirmed Cu/Ag terminations.
+- [ ] **TMP117: at most one**, as a board-level thermal-soak reference. The SCA3300's
+      internal die sensor (18.9 LSB/°C, 0.053 °C) is the correct source for accelerometer
+      compensation, so the two per-accel TMP117s are dropped.
+- [ ] **USB-C ESD array** (TPD4E05U06 class) and **TVS on 5 V in** — previously missing.
 - [ ] Source **non-magnetic M2 hardware** — brass, titanium or nylon.
 - [ ] **Screen candidate hardware and materials with a smartphone magnetometer.** Any app
       exposing the raw sensor works; A/B against a known-non-magnetic reference rather
@@ -415,8 +422,10 @@ With no prototype, footprint correctness is only proven after fab. Treat accordi
       pad. Coil tilt → axis misalignment → azimuth error.
 - [ ] MagI2C symbol + footprint (PN 13156, 28-pin MLF 4×4)
 - [ ] SCA3300-D01 symbol + footprint (12-pin pre-molded, 8.6 × 7.6 × 3.3 mm)
-- [ ] Pt1000 symbol (standard resistor footprint)
-- [ ] Verify STM32U585 in `MCU_ST_STM32U5`; check ICM-42688-P and TMP117
+- [ ] Pt1000 symbol — footprint per the chosen **non-magnetic package** (leaded or verified
+      Cu/Ag terminations), not a generic 0603
+- [ ] Verify STM32U585 **non-Q** in `MCU_ST_STM32U5`; check ICM-42688-P, the ESD array and
+      TVS; TMP117 only if the single board-reference unit is kept
 - [ ] **Verify every footprint against the physical parts in hand** before releasing
       gerbers — 1:1 paper printouts, parts laid on top, calipers on the MLF. This is the
       step a prototype would have caught for you.
@@ -435,6 +444,14 @@ With no prototype, footprint correctness is only proven after fab. Treat accordi
   - [ ] **Standalone bench power** — jumper or header so the board runs without a carrier
   - [ ] **Test points**: each supply rail, SPI bus, DRDY per MagI2C
   - [ ] **Raw-count path in the protocol from day one** — calibration needs it
+- [ ] **Power path:** 5 V in → TVS → low-noise LDO; **the LDO's EN pin is `/EN`**. Drop
+      Rev A's PMOS gate (Q1) and its exposed-gate ESD problem. Split **AVDD/DVDD with a
+      ferrite bead from the same 3.3 V rail** — the MagI2C's 0.1 V tracking rule forbids
+      separate regulators. Per-triad AVDD via load switches (see H1 findings).
+- [ ] **No crystal, no RTC.** USB FS on HSI48 + CRS; SPI on the internal oscillator; the
+      carrier sends wall-clock time at power-up and the module timestamps relatively.
+- [ ] **STM32U585 non-Q.** Confirm the ordered part number has no "Q" — the SMPS variant
+      puts a switching inductor on the board.
 
 ---
 
@@ -455,7 +472,11 @@ With no prototype, footprint correctness is only proven after fab. Treat accordi
        stress). **Orient each SCA3300 so the sight axis lies along its X or Y axis, never Z.**
        Offset temperature dependency is ±10 mg on X/Y but **±15 mg on Z**, and inclination
        error is dominated by the axis along the sight line — a free 1.5× on the budget's
-       largest term
+       largest term. **Rotate the pair 90° about the sight axis** relative to each other:
+       on steep shots the perpendicular axes dominate and one must be Z, so this gives every
+       geometry one sensor with good axes in the critical direction and turns common-mode
+       bias into a visible disagreement. Use the **SCA3300 internal die sensor** for its own
+       temperature compensation
 6. [ ] MCU, LDO, interface last
 7. [ ] Planes: **no pour keepout this time.** Keep GND under the coils, but route so no
        unrelated return current passes beneath them
