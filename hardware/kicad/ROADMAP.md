@@ -22,7 +22,8 @@ the module depends on, not a design. See also
 | MCU | STM32U585, "Q" suffix | **On-device calibration is a requirement, not a fallback** |
 | Gyro | 1× TDK ICM-42688-P | Motion gating only, not azimuth |
 | Dropped | SCHA63T, DRV425, ADXL355, LM94021, crystal | Reasons in README |
-| iPhone / 3D scan integration | **Out of scope** | Parked |
+| 3D scan / LiDAR integration | **Parked** | Carrier-level feature, needs no module changes |
+| Smartphone | **Bench tool + reference source only** | Magnetic screening and IGRF/solar lookup. **No app to be written** — on-device solving makes it redundant, and the cave ecosystem is Android |
 | Surface finish | Immersion silver or OSP — **never ENIG** | Nickel is ferromagnetic |
 
 ---
@@ -290,6 +291,13 @@ distance, but inline avoids the complexity.
       multiple units let you characterise part-to-part spread for the error budget.
 - [ ] Source **non-magnetic MLCCs** (Cu/Ag termination) for coil decoupling.
 - [ ] Source **non-magnetic M2 hardware** — brass, titanium or nylon.
+- [ ] **Screen candidate hardware and materials with a smartphone magnetometer.** Any app
+      exposing the raw sensor works; A/B against a known-non-magnetic reference rather
+      than trusting absolute values, and work away from the phone's own MagSafe ring.
+      Resolution is ~0.1–0.5 µT against a 35 nT budget, so it answers *"is this steel?"*
+      and nothing finer — enough for dowels (H3), cells (H5) and tripod inserts (H11),
+      but **not** for a single 0603's Ni barrier termination. Cannot resolve
+      [H1](#h1--the-eddy-current-problem).
 - [ ] Consider buying a **Cavway X1 as a reference instrument** (±0.4° / ±0.2°) for
       cross-checking. Note: never place two instruments side by side — they interfere
       magnetically. Shoot the same legs sequentially.
@@ -377,7 +385,9 @@ calibration, so the error budget depends entirely on this.
       commercial instruments**, and it is firmware, not hardware
 - [ ] Temperature chamber procedure (cooler + ice packs, low oven, 3 points over 0–30 °C)
 - [ ] Quality metrics: gradiometer residual, `\|a\|` vs 1 g, `\|B\|` vs IGRF, gyro motion flag
-- [ ] Absolute verification method: surveyed baseline or solar sighting
+- [ ] Absolute verification method: surveyed baseline or solar sighting. A smartphone
+      supplies what both need with no app development — position → IGRF/WMM expected
+      \|B\|, dip and declination, plus precise time and position for solar azimuth
 
 Having the solver drafted and ready the day boards arrive is what keeps bring-up short.
 
