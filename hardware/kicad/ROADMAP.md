@@ -575,15 +575,38 @@ Alternative suppliers: Solsta UK (authorized, post-Brexit customs), PNI direct
 
 With no prototype, footprint correctness is only proven after fab. Treat accordingly.
 
-- [ ] SEN-XY symbol + footprint (PN 13104)
-- [ ] **SEN-Z symbol + footprint (PN 13101) — precision-critical.** Pad, paste and mask
+**Done 2026-11-01** — project library `attinav` (`components/attinav/`), registered in both
+project tables. Only the physical-part check below remains.
+
+| Part | Symbol | Footprint | Source / notes |
+|---|---|---|---|
+| Sen-XY-f | `attinav:RM3100_Sen-XY-f` | `attinav:PNI_Sen-XY-f` | UM Fig 3-3. **Lands at 5.80 c-c, paste at 5.30 c-c** — the 5.30 dimension is the *termination* pitch; lands sit 0.25 outward. Paste 0.60×1.20 on separate F.Paste-only pads |
+| Sen-Z-f | `attinav:RM3100_Sen-Z-f` | `attinav:PNI_Sen-Z-f` | UM Fig 3-6. Lands 2.40×1.95, gap 0.40; paste 1.66×1.35 flush to the inner edge. **Pad 1 = polarity end; orient per UM Fig 4-4 (NED)** |
+| MagI2C | `attinav:RM3100_MagI2C` (28 pins, Table 4-1) | `attinav:PNI_MagI2C_MLF-28_4x4mm_P0.4mm_NoEP` | Stock QFN-28 P0.4 lead geometry (0.25×0.825); EP omitted per UM Fig 3-7. Pin 1 top-left, CCW — matches PNI |
+| SCA3300-D01 | `attinav:SCA3300-D01` (Table 6) | `attinav:Murata_SCA3300-D01` | Doc 3165 Fig 10: 0.61×0.98, pitch 1.0, rows 7.87 apart |
+| ICM-42688-P | `attinav:ICM-42688-P` (DS v1.9 Table 10) | **stock** `Package_LGA:LGA-14_3x2.5mm_P0.5mm_LayoutBorder3x4y` | 4-3-4-3 CCW matches TDK D1=1.5 / E1=1.0; no centre pad (TDK: must not be soldered). **Verify the pin-1 corner against DS Fig 5 at placement** |
+| Pt1000 | **stock** `Sensor_Temperature:PT1000` | stock 0603/0805 per the chosen non-magnetic package | — |
+| STM32U585, TPS7A20, TMP117 | stock `STM32U585RITx` / `VITxQ`, `TPS7A20xxxDBV`, `TMP117xxDRV` | stock LQFP-64/-100, SOT-23-5, WSON-6 1.5×1.5 | verified present in the installed libraries |
+
+Verified three ways: Konnect readback of pads and pins, `kicad-cli fp/sym export` (KiCad's own
+parser accepts every file), and rendered inspection of all four footprints. Courtyards came
+out pad-derived from `create_footprint` (SCA3300 was **1.5 mm short per side**) and were
+corrected to body-or-pads + 0.25. Known cosmetic: silk boxes on Sen-Z-f / SCA3300 follow
+the pad envelope, not the body; MagI2C symbol side pins read bottom-up.
+
+Konnect's library search covers only the three Rev A project libraries — the stock KiCad
+libs are not in the global table it reads. Harmless in the GUI; matters for Konnect-driven
+placement later.
+
+- [x] SEN-XY symbol + footprint (PN 13104)
+- [x] **SEN-Z symbol + footprint (PN 13101) — precision-critical.** Pad, paste and mask
       geometry straight from the PNI manual: 5 mil stencil, paste area much smaller than
       pad. Coil tilt → axis misalignment → azimuth error.
-- [ ] MagI2C symbol + footprint (PN 13156, 28-pin MLF 4×4)
-- [ ] SCA3300-D01 symbol + footprint (12-pin pre-molded, 8.6 × 7.6 × 3.3 mm)
-- [ ] Pt1000 symbol — footprint per the chosen **non-magnetic package** (leaded or verified
+- [x] MagI2C symbol + footprint (PN 13156, 28-pin MLF 4×4)
+- [x] SCA3300-D01 symbol + footprint (12-pin pre-molded, 8.6 × 7.6 × 3.3 mm)
+- [x] Pt1000 symbol — footprint per the chosen **non-magnetic package** (leaded or verified
       Cu/Ag terminations), not a generic 0603
-- [ ] Verify the chosen STM32U585 variant in `MCU_ST_STM32U5` (see the stock note in
+- [x] Verify the chosen STM32U585 variant in `MCU_ST_STM32U5` (see the stock note in
       Phase 4); check ICM-42688-P, the ESD array and TVS; TMP117 only if the single
       board-reference unit is kept
 - [ ] **Verify every footprint against the physical parts in hand** before releasing
