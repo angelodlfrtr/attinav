@@ -709,13 +709,25 @@
         "uuid": "17390514-7eab-48d7-a075-d99e4047bcae"
       }
     ],
-    "used_designators": "",
+    "used_designators": "L1-12,TH1-6,C1-33,U1-9,#PWR1-49,#PWR55-79,R1-45,JP1-6",
     "variants": []
   },
   "sheets": [
     [
       "17390514-7eab-48d7-a075-d99e4047bcae",
       "attinav"
+    ],
+    [
+      "f9166664-a41f-4710-a4fb-7bb33f03bc54",
+      "MAG1"
+    ],
+    [
+      "f1c730a6-c73a-4de0-8fe1-cf5df0d328a6",
+      "MAG2"
+    ],
+    [
+      "d9357c92-db6f-4476-a22d-cae99ea83739",
+      "MAG3"
     ]
   ],
   "text_variables": {},
