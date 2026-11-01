@@ -3,9 +3,12 @@
 Sequence, status and decisions for the Rev B redesign.
 Technical rationale lives in [README.md](README.md) — this file is the plan.
 
-**Scope: the AHRS sensor module only.** Not a complete instrument. The carrier
-(BLE, screen, buttons, battery) and laser boards are separate and out of scope here.
-See [Possible carrier roles](#possible-carrier-roles).
+**Scope: this repo covers the AHRS sensor module only.** Not a complete instrument.
+The carrier (BLE, screen, buttons, battery), the laser board and the housing are
+separate and **not designed here**. Where they affect the module they are recorded as
+[Housing and system requirements](#housing-and-system-requirements) — an interface spec
+the module depends on, not a design. See also
+[Possible carrier roles](#possible-carrier-roles).
 
 ---
 
@@ -26,17 +29,16 @@ See [Possible carrier roles](#possible-carrier-roles).
 
 ## Phase 1 — Resolved
 
-> ### ⚠ Governing assumption — confirm before layout
-> A handheld instrument roughly in Cavway X1 territory: **~130 × 55 × 33 mm**, with the
-> AHRS board at one end, the carrier (battery, screen, BLE) at the other, and the laser
-> between or alongside. **Decisions 1.1 and 1.2 hang off this.** If the housing differs,
-> revisit both.
+> **Assumed instrument context** (not designed here, see
+> [Housing and system requirements](#housing-and-system-requirements)): a self-contained
+> handheld, ~175 × 48 × 28 mm, zoned front-to-rear as laser → magnetometers →
+> module electronics → carrier → battery. **If that zoning changes, revisit 1.1 and 1.2.**
 
 | # | Decision | Resolution |
 |---|---|---|
-| 1.1 | Mechanical envelope | **80 × 36 mm, 6 layers, 1.6 mm** |
-| 1.1b | Mechanical datum | **2× reamed locating holes + non-magnetic dowel pins**, plus 2× clearance holes for screws |
-| 1.2 | Coil cluster placement | **Compact non-collinear triangle at the far end**, 18–38 mm baselines |
+| 1.1 | Board outline | **110 × 40 mm, 6 layers, 1.6 mm** |
+| 1.1b | Mechanical datum | **Flat seating face + 2 dowels at opposite ends of the long axis** (L ≥ 30 mm), plus clearance holes for clamping screws |
+| 1.2 | Coil cluster placement | **Non-collinear triangle in the forward zone**, ~40–50 mm long baselines |
 | 1.3 | Carrier interface | **UART over 8-pin FFC**; USB-C direct to the MCU, separate |
 | 1.4 | Supply from carrier | **5 V**, local low-noise LDO to 3.3 V |
 | 1.5 | Accelerometer count | **2** |
@@ -44,51 +46,90 @@ See [Possible carrier roles](#possible-carrier-roles).
 
 ### 1.1 / 1.2 — Floorplan
 
+One rigid PCB, 110 × 40 mm, spanning the non-conductive nose into the machined chassis.
+
 ```
-                36 mm
-    ┌───────────────────────────┐
-    │                           │
-    │   [A]               [C]   │   magnetometer zone
-    │                           │   x = 0 … 50 mm
-    │   [B]                     │   A–B 18mm,  A–C / B–C ~38mm
-    │                           │
-    ├───────────────────────────┤
-    │  (o)   [G1] [G2]    (o)   │   accel pair + DATUM
-    ├───────────────────────────┤   x = 50 … 64 mm
-    │  [U585]        [LDO]      │   MCU / power / interface
-    │  [USB-C]       [FFC]      │   x = 64 … 80 mm
-    └───────────────────────────┘
-                80 mm
-                                    ↓ carrier board this end
+  x=0                                                        110 mm
+    ┌──────────────────────────────┬──────────────────────────────┐
+    │                              │                              │
+    │   [A]                        │                              │  40
+    │          (o)                 │   [G1][G2]          (o)      │  mm
+    │   [B]              [C]       │   [U585]   [LDO] [USB-C][FFC]│
+    │                              │                              │
+    └──────────────────────────────┴──────────────────────────────┘
+      POM/PEEK nose (non-conductive)   machined aluminium chassis
+      x = 0 … 55  magnetometers        x = 55 … 110  electronics
+      A–B 24mm, A–C / B–C ~40mm        datum dowels L ≈ 43 mm
+                                                          carrier end →
 ```
 
-Area 2880 mm², ~60% larger than Rev A's 1780 mm². Buys comfortable separation and
-routing room.
-
-**Why cluster the magnetometers rather than spread them along the board** — this reverses
-the earlier "spread as widely as possible" guidance in
-[README → Magnetic hygiene rules](README.md#magnetic-hygiene-rules), rule 4:
-
-Gradient from a dipole at distance *r* is roughly `3|B|/r`. Steel 0.5 m away producing
-100 nT gives **~600 nT/m**. At a 20 mm baseline that needs a 12 nT differential, against
-~21 nT of raw differential sensor noise — marginal. **But hundreds of samples are averaged
-per shot**, dropping noise to ~1.5 nT, which resolves 12 nT with 8× margin.
-
-So baseline stops being the binding constraint and **distance from the carrier's magnetic
-sources becomes it** — the laser (~0.8°) and BLE (~0.3°) dominate. Clustering all three at
-the far end maximises that distance. A non-collinear triangle also yields 2D gradient
-information, which a line along the board would not.
+**Keep it one board.** The coils' orientation relative to the datum is then fixed by the
+FR4 itself, with no mechanical interface to drift.
 
 Place `[G1] [G2]` adjacent so they share temperature and mechanical stress — that makes
 their disagreement a meaningful fault signal rather than a thermal artefact.
 
-### 1.1b — Datum
+### Why 110 × 40 — and why it is not a minimum
 
-The error budget allocates **0.03° to sight-axis alignment**. Clearance holes with M2
-screws give ±0.1–0.2 mm of slop, which over a 60 mm lever is **0.1–0.2°** — it blows the
-budget alone. So: **dowels locate, screws only clamp.** Non-magnetic dowels (brass or
-ceramic). Marked `(o)` above, straddling the accelerometers so the datum sits close to
-what it references.
+**The accuracy-limited minimum is ~70 × 35 mm.** Nothing in the error budget improves
+above roughly 75 × 35 mm:
+
+| Error term | Contribution | Scales with board size? |
+|---|---|---|
+| Mag noise (averaged) | 0.014° | **No** — sensor + averaging only |
+| Mag calibration residual | 0.057° | **No** — calibration quality |
+| Tilt error × tan 63° | 0.069° | **No** — accel temperature calibration |
+| Mag↔accel misalignment | 0.030° | **No** — PCB rigidity |
+| Sight-axis alignment | 0.030° | **Partly** — via dowel separation *L* |
+
+**You cannot buy accuracy with board area.** The accuracy levers are multi-temperature
+calibration (biggest), the housing datum and thermal mass, distance from the battery (a
+*housing* length, not a board dimension), and layout hygiene.
+
+**What does scale is anomaly detection** — a capability, not an accuracy term, and the
+module's distinguishing feature. Averaged differential noise between two clusters is
+~2.1 nT, so the resolvable gradient is 2.1 nT / baseline:
+
+| Baseline | Gradient floor |
+|---|---|
+| 20 mm | 105 nT/m |
+| 35 mm | 60 nT/m |
+| 50 mm | 42 nT/m |
+
+An anomaly producing **35 nT is exactly 0.1°** — the whole azimuth budget. From 0.5 m
+that is a gradient of ~210 nT/m: only **2× margin at a 20 mm baseline, 5× at 50 mm**.
+So 40–50 mm baselines are worth paying board length for.
+
+Caveat: on a 40 mm-wide board the **transverse baseline is capped at ~25 mm**, so the
+gradiometer is anisotropic — gradients across the short axis are detected less sensitively.
+
+Also note this supersedes rule 4 ("spread as widely as the board allows") in
+[README → Magnetic hygiene rules](README.md#magnetic-hygiene-rules). Averaging makes
+baseline a soft constraint; **distance from the battery and laser is the hard one.**
+
+If the housing forces a shrink: ~85 × 35 mm costs detection sensitivity and nothing in
+the error budget. Below ~70 × 35 mm real compromises begin.
+
+### 1.1b — Datum (corrected)
+
+The error budget allocates **0.03° to sight-axis alignment**. Two locating features
+separated by *L*, each with radial clearance δ, permit a rotation of **θ ≈ 2δ/L**:
+
+| Fit | δ | L = 43 mm | L = 25 mm |
+|---|---|---|---|
+| Reamed + ground dowel (H7/h6) | 0.006 mm | **0.014°** | 0.024° |
+| Machined, loose | 0.02 mm | 0.047° | 0.092° |
+| M2 clearance hole only | 0.15 mm | 0.35° | 0.60° |
+
+**So: dowels locate, screws only clamp.** And — correcting the earlier floorplan — the
+dowels go at **opposite ends of the long axis**, not straddling the accelerometers.
+Straddling them across the 40 mm width gives L ≈ 25 mm, which even with a machined fit
+lands at 0.024°, consuming most of the allocation for no reason.
+
+Plus a **flat seating face** against the chassis for out-of-plane constraint, which
+dowels cannot provide.
+
+Dowels must be **non-magnetic** — brass or ceramic.
 
 ### 1.3 — Interface
 
@@ -147,6 +188,79 @@ the gyro sees it. €8 and 2.5 × 3 mm for a motion-validity flag on every shot.
 Keep the asymmetric dielectric with **In2/In3 at 0.1 mm** — one of Rev A's genuinely good
 decisions. **No pour keepout this time**: keep GND under the coils and manage return paths
 instead.
+
+---
+
+## Housing and system requirements
+
+**Not designed in this repo.** This is the interface spec the module depends on — what
+the housing, carrier and laser must provide for the error budget to hold. Record it here
+so the constraints are not lost, and hand it to whoever builds the instrument.
+
+### Hard requirements
+
+| # | Requirement | Why |
+|---|---|---|
+| H1 | **Non-conductive section (POM/PEEK) over the magnetometer zone**, ≥10 mm clearance to any aluminium | **Eddy currents.** See [below](#h1--the-eddy-current-problem) |
+| H2 | **Machined** chassis providing a flat seating face + 2 dowel bosses, L ≥ 30 mm, reamed | Datum error scales as 2δ/L; a printed housing caps you at ~0.25° |
+| H3 | **Non-magnetic dowels** — brass or ceramic | Hard iron 50 mm from the coils |
+| H4 | **No speaker, no vibration motor, anywhere.** Piezo buzzer only | Permanent magnets, and the motor's **moves** — not calibratable |
+| H5 | **Captive LiPo pouch cell, not an 18650** | 18650s have **steel cans**. Pouch cells use aluminium laminate |
+| H6 | Battery **rearmost**, ≥100 mm from the coil zone | Its current varies with load |
+| H7 | Battery **not user-removable** | Swapping changes its hard-iron signature → voids calibration |
+| H8 | **Laser doweled to the same chassis** as the module, optical axis inline | One interface each; the budget multiplies interfaces |
+| H9 | Laser can ≥10 mm from the nearest coil | Static hard iron is calibratable, but minimise it |
+| H10 | Carrier honours the **`QUIET` line**: no BLE TX, backlight fixed, laser off, converters at fixed load | Pulsed currents are *not* calibratable |
+| H11 | Tripod boss (if fitted) **at the rear**, brass or direct-in-aluminium, **never a steel insert** | And note the tripod's own screw is usually steel — a *variable* source |
+| H12 | Module **bonded or captive** after calibration, not removable | Calibration is assembly-specific |
+
+### H1 — the eddy-current problem
+
+The RM3100 is magneto-**inductive**: it measures LC oscillation frequency, which depends
+on coil inductance. A nearby conductor loads the coil through eddy currents and shifts
+that inductance, i.e. **shifts the gain**. Skin depth in aluminium at ~100 kHz is
+~0.26 mm, so a 2 mm wall is many skin depths and couples well. Worse, aluminium
+conductivity varies ~0.4%/°C, so a fixed geometry becomes a **temperature-dependent gain
+drift** — the class of error calibration handles worst.
+
+- [ ] **VERIFY before committing to the housing.** Bring an aluminium plate toward the
+      Rev A board and log the gain vs. distance. Check the PNI manual for guidance on
+      nearby non-ferrous metal. This is reasoning from physics, not a cited spec.
+
+### Why machined, quantitatively
+
+| Housing | δ (radial) | Datum error at L = 43 mm | Azimuth budget total |
+|---|---|---|---|
+| Machined, reamed + ground dowel | 0.006 mm | 0.014° | **0.10°** |
+| SLA / MJF print | ~0.1 mm | 0.16° | 0.19° |
+| FDM print | ~0.2 mm | 0.25° | **0.27°** |
+
+A printed housing makes itself the single largest error term — larger than all the
+sensors combined — and caps the instrument around 0.25–0.3°, i.e. Cavway X1 territory.
+
+**Escape hatch:** calibrate the sensor-to-sight-axis transform against a known azimuth
+(surveyed baseline or solar sighting). That converts the requirement from *precise* to
+*stable*, so a printed housing with a **potted** board could still reach target. Do this
+anyway even with a machined chassis — machining buys precision, calibration buys
+insensitivity to what is left.
+
+### Assumed zoning
+
+```
+  0        30   40                95        135              175 mm
+  ├─────────┤   ├──────────────────┤─────────┤────────────────┤
+  │ LASER   │gap│  MAGNETOMETERS   │  AHRS   │ CARRIER + BATT │
+  │         │   │  (POM/PEEK nose) │ (alu)   │  (alu)         │
+  └─────────┴───┴──────────────────┴─────────┴────────────────┘
+```
+
+Self-contained handheld, ~175 × 48 × 28 mm, est. 200–250 g. Longer than the Cavway X1's
+131 mm because **separating the coils from the battery is the dominant constraint** and
+length is cheap. Coil-to-battery ≈ 100 mm.
+
+Keep the laser **inline**, not offset: an offset creates parallax error scaling inversely
+with shot distance — 20 mm offset on a 2 m shot is 0.57°. Correctable using the measured
+distance, but inline avoids the complexity.
 
 ---
 
