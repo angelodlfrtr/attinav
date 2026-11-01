@@ -3,4 +3,5 @@
   (lib (name "SCHA63T-K03-05")(type "KiCad")(uri "${KIPRJMOD}/components/SCHA63T-K03-05")(options "")(descr ""))
   (lib (name "TS-1088-AR02016")(type "KiCad")(uri "${KIPRJMOD}/components/TS-1088-AR02016")(options "")(descr ""))
   (lib (name "WIT-rm3100")(type "KiCad")(uri "${KIPRJMOD}/components/WIT-RM3100/WIT-rm3100.pretty")(options "")(descr ""))
-)
+
+  (lib (name "attinav") (type "KiCad") (uri "${KIPRJMOD}/components/attinav/attinav.pretty") (options "") (descr "")))

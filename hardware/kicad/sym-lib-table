@@ -3,4 +3,5 @@
   (lib (name "SCHA63T-K03-05")(type "KiCad")(uri "${KIPRJMOD}/components/SCHA63T-K03-05/SCHA63T-K03-05.kicad_sym")(options "")(descr ""))
   (lib (name "WIT-RM3100")(type "KiCad")(uri "${KIPRJMOD}/components/WIT-RM3100/WIT-RM3100.kicad_sym")(options "")(descr ""))
   (lib (name "TS-1088-AR02016")(type "KiCad")(uri "${KIPRJMOD}/components/TS-1088-AR02016/TS-1088-AR02016.kicad_sym")(options "")(descr ""))
-)
+
+  (lib (name "attinav") (type "KiCad") (uri "${KIPRJMOD}/components/attinav/attinav.kicad_sym") (options "") (descr "")))
