@@ -40,7 +40,7 @@ the module depends on, not a design. See also
 | 1.1 | Board outline | **110 × 40 mm, 6 layers, 1.6 mm** |
 | 1.1b | Mechanical datum | **Flat seating face + 2 dowels at opposite ends of the long axis** (L ≥ 30 mm), plus clearance holes for clamping screws |
 | 1.2 | Coil cluster placement | **Non-collinear triangle in the forward zone**, ~40–50 mm long baselines |
-| 1.3 | Carrier interface | **UART over 8-pin FFC**; USB-C direct to the MCU, separate |
+| 1.3 | Carrier interface | **UART over 8-pin 1.0 mm latching FFC**, interleaved-ground pinout; USB-C direct to the MCU, separate. Compliant link is **required** by the bonded datum |
 | 1.4 | Supply from carrier | **5 V**, local low-noise LDO to 3.3 V |
 | 1.5 | Accelerometer count | **2** |
 | 1.6 | Gyro | **Keep** — 1× ICM-42688-P |
@@ -179,8 +179,44 @@ Dowels must be **non-magnetic** — brass or ceramic.
 | `/EN` | carrier → AHRS | power gate — **drives the LDO's EN pin**; Rev A's PMOS (Q1) is dropped |
 | `QUIET` | **AHRS → carrier** | open-drain, asserted during magnetic integration |
 
-Six signals on an **8-pin FFC** (two spares). A flex with adjacent ground also fixes the
-inter-board loop-area problem; pin headers do not.
+Six signals on an **8-pin, 1.0 mm pitch FFC with flip-latch connectors on both boards**.
+The two spare positions are spent as grounds:
+
+```
+ 1    2    3    4    5    6    7    8
+GND  5V  GND   TX   RX  /EN QUIET GND
+```
+
+5 V sits between two grounds so its return is adjacent on both sides and the supply
+current loop is as small as the cable allows; the UART pair is flanked from the power pin.
+1.0 mm over 0.5 mm: more robust, inspectable, and eight positions is all that is needed.
+Basic parts at JLCPCB.
+
+**Why a compliant link is required, not merely convenient.** Housing path 2 bonds the board
+to the chassis and captures its position by calibration. Anything that afterwards moves or
+stresses the board corrupts the sight-axis alignment — so the interconnect must not be a
+rigid bridge through which carrier flex, screen presses, battery weight or assembly
+tolerance reach the bonded board. That one requirement decides the options:
+
+| Option | Verdict | Why |
+|---|---|---|
+| Castellated edges (module soldered onto the carrier) | ✗ | Carrier becomes the structural reference: laser→chassis→carrier→solder→AHRS through a flexing board. Also puts carrier copper and return currents under the coil zone |
+| Pin headers / stacking sockets (Rev A's J2–J5) | ✗ | Rigid coupling; friction contacts go intermittent under knocks; mating force loads the bonded board; fixes the stack height; 8–11 mm tall. Bench SWD only |
+| Mezzanine (Hirose DF40, Molex SlimStack) | ✗ | Same rigid coupling, plus ±0.1 mm parallelism between a bonded board and a separately mounted carrier. 0.4 mm pitch is unreworkable. Overkill for 6 signals |
+| **FFC / FPC jumper** | **✓ primary** | Compliant; bends, so it works whether the carrier sits in-line or stacked above the electronics zone; adjacent conductors give a tight loop; latching variants hold under vibration; ~1.5 mm tall |
+| **JST GH 1.25 mm latching harness** | **✓ alternative** | Equally compliant, more shock-tolerant, routes anywhere; bulkier (~4 mm), hand-crimped, and the 5 V/GND pair must be twisted to keep the loop small |
+
+Rigid-flex (AHRS + carrier as one assembly) is the best answer if this ever becomes a
+product, but it couples both board designs into one revision cycle and the carrier is out
+of scope here.
+
+Switch to JST GH only if the cable path turns out awkward or ruggedness matters more than
+height — it is a legitimate choice, not a fallback.
+
+**Connector metalwork:** some FFC connectors carry stainless-steel reinforcement nails;
+JST GH has none. At 55+ mm from the coils and fixed, it is calibratable and nearly
+negligible — but given a free choice, pick an all-plastic-body FFC part. Strain relief and
+cable routing are housing requirement H13.
 
 **UART, not SPI** — a shot is tens of bytes, so bandwidth is irrelevant. UART needs fewer
 pins, survives a cable better, and is trivially debuggable. SPI would make the carrier
@@ -255,6 +291,7 @@ so the constraints are not lost, and hand it to whoever builds the instrument.
 | H10 | Carrier honours the **`QUIET` line**: no BLE TX, backlight fixed, laser off, converters at fixed load | Pulsed currents are *not* calibratable |
 | H11 | Tripod boss (if fitted) **at the rear**, brass or direct-in-aluminium, **never a steel insert** | And note the tripod's own screw is usually steel — a *variable* source |
 | H12 | Module **bonded or captive** after calibration, not removable | Calibration is assembly-specific |
+| H13 | **FFC strain-relieved at the AHRS end** (adhesive dab or chassis clamp) and **routed rearward only** | Residual cable tension pulls on the bonded board; the cable carries the 5 V supply current and must never cross the coil zone |
 
 ### H1 — the eddy-current problem
 
