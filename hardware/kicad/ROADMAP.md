@@ -202,7 +202,7 @@ so the constraints are not lost, and hand it to whoever builds the instrument.
 
 | # | Requirement | Why |
 |---|---|---|
-| H1 | **Non-conductive section (POM/PEEK) over the magnetometer zone**, ≥10 mm clearance to any aluminium | **Eddy currents.** See [below](#h1--the-eddy-current-problem) |
+| H1 | *Preferred, not blocking:* non-conductive section (POM/PEEK) over the magnetometer zone, ≥10 mm clearance to any aluminium | Eddy currents — **downgraded to low risk**, PNI is silent on non-ferrous metal. See [below](#h1--the-eddy-current-problem) |
 | H2 | **Machined** chassis providing a flat seating face + 2 dowel bosses, L ≥ 30 mm, reamed | Datum error scales as 2δ/L; a printed housing caps you at ~0.25° |
 | H3 | **Non-magnetic dowels** — brass or ceramic | Hard iron 50 mm from the coils |
 | H4 | **No speaker, no vibration motor, anywhere.** Piezo buzzer only | Permanent magnets, and the motor's **moves** — not calibratable |
@@ -224,24 +224,52 @@ that inductance, i.e. **shifts the gain**. Skin depth in aluminium at ~100 kHz i
 conductivity varies ~0.4%/°C, so a fixed geometry becomes a **temperature-dependent gain
 drift** — the class of error calibration handles worst.
 
-**Status: unverified.** This is reasoning from physics, not a cited spec. **Rev A was
-never fabricated**, so there is no existing hardware to test against. Three ways to
-resolve it:
+### Status: downgraded to low risk — PNI is silent on non-ferrous metal
 
-- [ ] **(a) Cheapest — buy one assembled RM3100 breakout** alongside the Phase 2 parts
-      order (GNSS.store ELT0327 ~€35, or a cavedevice kit on a scrap board). Log gain vs.
-      distance to an aluminium plate, and gain vs. temperature with the plate fixed. ~€35
-      and no design work, and the same board doubles as a target for early calibration-
-      firmware development.
-- [ ] **(b) Check the PNI sensor suite manual** for guidance on nearby non-ferrous metal.
-      Free, and may settle it outright.
-- [ ] **(c) Design around it — the conservative default.** Build the hybrid housing
-      (non-conductive nose) regardless. The POM/PEEK nose is a non-structural cover, so
-      it costs little and removes the risk without needing the answer.
+Checked against the **RM3100 & RM2100 Sensor Suite User Manual, Doc 1017252 R07**,
+section 4.2.2 *Local Magnetic Field Considerations*. PNI lists only three hazards:
 
-**Recommended: (b), then (c), with (a) if you want the number.** Do not defer this to
-Rev B bring-up *and* commit to a one-piece aluminium housing — if H1 is real, a
-single-billet chassis is unfixable, whereas the hybrid is cheap insurance either way.
+> large electric currents, large masses of **ferrous** material, or devices incorporating
+> permanent magnets, such as speakers and electric motors
+
+**Nothing about eddy currents or non-ferrous conductors.** A keyword search of the whole
+manual for *eddy / aluminium / conductive / metal / enclosure / housing / mount* returns
+nothing relevant.
+
+That is weak but real evidence against the concern: the RM3100 ships in drone compasses,
+marine and space applications, which routinely sit inside aluminium and CFRP structures.
+PNI would very likely document it if aluminium proximity shifted gain materially.
+
+**Revised position:**
+- The hybrid housing (non-conductive nose) remains the **preferred** design — it is cheap
+  insurance and the nose is a non-structural cover either way.
+- But it is **no longer a blocker.** A one-piece aluminium chassis is an acceptable risk
+  if it simplifies manufacture, provided H1 is tested at Rev B bring-up.
+- Keeping ≥10 mm aluminium clearance remains sensible regardless.
+
+PNI also documents the exact test method, should you want the number (manual §4.2.2):
+place the eval board on a firm surface, gradually bring the component toward it, and note
+when the field starts to change — holding board orientation constant throughout. Without
+an eval board, bring the component toward one coil and watch the MagI2C reading.
+
+### Related findings from the same manual
+
+| Finding | Consequence |
+|---|---|
+| *"Position the sensor coils as close to each other as possible"* to minimise gradient error | **Within** a triad, group the three coils tightly. Separating the three *triads* for gradiometry is consistent with this — each triad still samples one clean field point |
+| *"Keep capacitors, especially tantalum capacitors, far away from the sensor coils"* | **Corrects earlier guidance in this repo.** Decouple at the MagI2C, not at the coils |
+| MagI2C within 10 cm of its coils; the two ASIC→coil traces as close together as possible | Trace-pair routing requirement |
+| **AVDD may be switched off between measurements**; registers retained on DVDD | Per-triad AVDD gating gives power saving, time-multiplexing and de-energised idle coils in one mechanism |
+| DVDD on whenever AVDD is on; DVDD first or simultaneous; AVDD within 0.1 V of DVDD | **Power-sequencing requirement** — needs a load switch or sequencer per MagI2C |
+| AVSS/DVSS within 0.1 V; may share a plane if clean | Single ground plane is acceptable |
+| Linear regime **±200 µT** (Earth ~50 µT) | 4× headroom |
+| Sen-Z-f **polarity indicator is critical**; Sen-XY-f is insensitive to it | Footprint and placement care |
+| Sen-Z-f **may be bottom-mounted** with ZDRVN/ZDRVP swapped | Option for managing its 6.35 mm height |
+| **Halide-free solder paste required** for the coils, reflow *and* cleaning | Tell the assembler — easy to miss, and non-negotiable |
+| Do **not** solder the MagI2C's exposed centre die pad | Footprint detail |
+| MSL: Sen-XY-f / Sen-Z-f level 1, MagI2C MLF level 3 | Handling and bake-out |
+| 5 mil stencil, paste area much smaller than pad, to reduce tilt and misalignment | The SEN-Z tilt mitigation, confirmed |
+| Reflow per J-STD-020, peak <260 °C; opposite side may be wave-soldered afterwards | Process window |
 
 ### Why machined, quantitatively
 
@@ -289,7 +317,12 @@ distance, but inline avoids the complexity.
       instead of your own assembly.
 - [ ] Order for **3+ board builds**, not 1. Murata lead times are the schedule risk, and
       multiple units let you characterise part-to-part spread for the error budget.
-- [ ] Source **non-magnetic MLCCs** (Cu/Ag termination) for coil decoupling.
+- [ ] Source **non-magnetic MLCCs** (Cu/Ag termination) **only where a capacitor must sit
+      within ~10 mm of a coil.** PNI's rule is to keep capacitors — tantalums especially —
+      *away* from the coils, so decoupling belongs at the MagI2C. Standard MLCCs are fine
+      there.
+- [ ] Confirm the assembler can use **halide-free solder paste** — PNI requires it for the
+      sensor coils, for both reflow and cleaning. Non-negotiable and easy to miss.
 - [ ] Source **non-magnetic M2 hardware** — brass, titanium or nylon.
 - [ ] **Screen candidate hardware and materials with a smartphone magnetometer.** Any app
       exposing the raw sensor works; A/B against a known-non-magnetic reference rather
@@ -344,12 +377,18 @@ With no prototype, footprint correctness is only proven after fab. Treat accordi
 
 1. [ ] Board outline + mounting/datum features from the enclosure
 2. [ ] **Place the 3 coil clusters first, maximally separated.** Everything works around them
-3. [ ] Per cluster: coils + MagI2C + tight non-magnetic decoupling, supply/return as a tight pair
-4. [ ] Accelerometers near the mechanical datum, close together (same temperature, same stress)
-5. [ ] MCU, LDO, interface last
-6. [ ] Planes: **no pour keepout this time.** Keep GND under the coils, but route so no
+3. [ ] Per cluster: **the three coils of a triad as close together as possible** (PNI:
+       minimises gradient error across the triad), MagI2C within 10 cm, the two
+       ASIC→coil traces routed as a tight pair, and **decoupling at the ASIC — capacitors
+       kept away from the coils**
+4. [ ] Sen-Z-f: **polarity indicator orientation is critical** (Sen-XY-f is insensitive).
+       Follow the NED layout in manual Figure 4-4. Sen-Z-f **may be bottom-mounted** with
+       ZDRVN/ZDRVP swapped — an option for managing its 6.35 mm height
+5. [ ] Accelerometers near the mechanical datum, close together (same temperature, same stress)
+6. [ ] MCU, LDO, interface last
+7. [ ] Planes: **no pour keepout this time.** Keep GND under the coils, but route so no
        unrelated return current passes beneath them
-7. [ ] Keep Rev A's tight In2(+3.3V)/In3(GND) 0.1 mm plane pair — it was a good decision
+8. [ ] Keep Rev A's tight In2(+3.3V)/In3(GND) 0.1 mm plane pair — it was a good decision
 
 ---
 

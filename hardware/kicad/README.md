@@ -413,7 +413,9 @@ Scale reference: **10 mA at 10 mm ≈ 200 nT**. Against 20 µT horizontal that i
    distort a DC field. The reason to fear planes near a magnetometer is *current in
    them*, not the metal — and removing the plane forced Rev A's supply and return into
    long open loops. Keep a ground plane under the magnetometers; route each MagI2C's
-   supply/return as a tight pair with non-magnetic decoupling right at the coils; keep
+   supply/return as a tight pair with decoupling **at the MagI2C ASIC, not at the coils**
+   (PNI: *"keep capacitors, especially tantalum capacitors, far away from the sensor
+   coils"*); keep
    unrelated return currents out of the region.
 2. **Surface finish: immersion silver or OSP. NOT ENIG.** Electroless *Nickel*
    Immersion Gold deposits 3–6 µm of ferromagnetic nickel on every exposed pad. Rev A
