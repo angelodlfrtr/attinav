@@ -224,8 +224,9 @@ poll as master for no benefit.
 
 `QUIET` is an **output** from this board: only the module knows when it is integrating.
 
-**USB-C goes direct to the U585's USB OTG**, not through the carrier — the
-calibration raw-stream path and standalone bench interface.
+**USB goes direct to the MCU's USB OTG FS**, not through the carrier — the
+calibration raw-stream path and standalone bench interface. Physically a **JST SH 4-pin
+pigtail header, not a USB-C receptacle** (steel shell) — see Phase 4.
 
 ### 1.4 — Supply
 
@@ -619,7 +620,10 @@ placement later.
 
 - [x] **Go hierarchical.** Rev A is one flat sheet with 113 symbols. Root `attinav.kicad_sch`
       (A4) now only holds sheet instances; all circuitry lives in child sheets.
-- [ ] Sheets: power, MCU, **magnetometer (instantiated 3× — done 2026-11-01)**, accel, interface
+- [ ] Sheets: **power (done)**, **MCU (done)**, **magnetometer (instantiated 3× — done)**,
+      accel, interface — all three done 2026-11-01. With the MCU sheet in, kicad-cli ERC
+      shows only the labels waiting for the accel and interface sheets (`ACC_*`, `CS_ACC*`,
+      `CS_IMU`, `IMU_INT`, `UART_*`, `QUIET`, `5V_FFC`, `EN`).
   - [x] **`mag.kicad_sch` — RM3100 triad**, instanced as `MAG1..3` on the root. Per instance:
         MagI2C 13156 (`attinav:RM3100_MagI2C`), 2× Sen-XY-f + 1× Sen-Z-f, **6× 121 Ω** in
         series with each DRV pin (IN pins direct to the coil, Z polarity: ZINN ↔ pin `1_POL`),
@@ -648,10 +652,42 @@ placement later.
       layout is possible (ground 28/29, VDD on 33, 2.2 µF on 62, solder-jumper options on
       30/31/32, PB2/PB9/PB10/PB12 sacrificed) but not worth it while the Q LQFP-64 is the
       scarcer part — keep as a future option only.
-- [ ] Pin budget check on the LQFP-64 while drawing the MCU sheet
+- [x] **Pin budget and assignment — `mcu.kicad_sch`, 2026-11-01.** 29 signal pins used of
+      ~50 GPIO; 17 spare pins left no-connect. PB2/PB9/PB10/PB12 and PC4/PC5 deliberately
+      unused so the Q-package dual-fit option above stays open.
+
+      | Function | Pins | Net |
+      |---|---|---|
+      | SPI1 → 3× RM3100 | PA5 SCK, PA7 MOSI, PA6 MISO | `SPI_SCLK/MOSI/MISO` |
+      | Mag chip selects | PC6, PC7, PC8 | `CS_MAG1..3` |
+      | Mag data-ready (EXTI 9, 8, 10 — distinct lines) | PC9, PA8, PC10 | `DRDY_MAG1..3` |
+      | Mag AVDD switches | PC11, PC12, PD2 | `AVDD_EN1..3` |
+      | Pt1000 dividers (ADC1_IN1..3) | PC0, PC1, PC2 | `TEMP_MAG1..3` |
+      | SPI2 → 2× SCA3300 + ICM-42688-P | PB13 SCK, PB15 MOSI, PB14 MISO | `ACC_SCLK/MOSI/MISO` |
+      | Accel / IMU chip selects, IMU interrupt (EXTI 7) | PB4, PB5, PB6; PB7 | `CS_ACC1`, `CS_ACC2`, `CS_IMU`; `IMU_INT` |
+      | Carrier UART (LPUART1, wake-capable) | PA2 TX, PA3 RX | `UART_TX`, `UART_RX` |
+      | `QUIET` (open-drain out) | PA15 | `QUIET` |
+      | USB FS device | PA11 DM, PA12 DP | via USBLC6-2SC6 to the JST SH header |
+      | SWD + SWO (Tag-Connect TC2030-NL pads, no connector body) | PA13, PA14, PB3, NRST | — |
+      | BOOT0 (10 k pull-down, jumper to +3V3 = DFU) | PH3 | — |
+      | Status LED | PA0 | — |
+      | Spare on test pads (ADC-capable) | PA1, PA4 | `TP_PA1`, `TP_PA4` |
+      | Supplies | VDD ×3 + VBAT ← `+3V3`; VDDA ← `+3.3VA`; VDDUSB ← `+3V3`; VCAP 4.7 µF | — |
+
+      Note for firmware: the `TEMP_MAGn` dividers are fed from `+3V3` while VREF+ = VDDA =
+      `+3.3VA` (≈60 mV lower). Measure ratiometrically against VREFINT, or accept the fixed
+      ~2 % scale error — only relative temperature matters for compensation.
 - [ ] **Design for bring-up** — needed now that there is no prototype:
-  - [ ] **USB-C on the U585's USB OTG** — streaming raw counts during calibration
-        development is far faster than BLE through a carrier that does not exist
+  - [x] **USB device port on the MCU's USB OTG FS** — streaming raw counts during calibration
+        development is far faster than BLE through a carrier that does not exist.
+        **Changed 2026-11-01: not a USB-C receptacle.** Every USB-C/micro receptacle has a
+        stainless or nickel-plated steel shell, which violates the non-magnetic-hardware
+        rule even at the rear of the board. The port is a **4-pin JST SH 1.0 mm (SM04B-SRSS-TB,
+        all-plastic body, phosphor-bronze contacts) carrying VBUS / D− / D+ / GND to a
+        pigtail** ending in a USB-A or USB-C plug. ESD: **USBLC6-2SC6** (replaces the
+        TPD4E05U06 idea; only two data lines to protect). No CC resistors on the board: use a
+        pigtail with a USB-A plug, or a C plug that carries its own Rd. **BOOT0 solder jumper
+        to +3V3 gives USB DFU** without the SWD probe.
   - [x] **Standalone bench power** — USB `VBUS` OR-ed into `+5V` and a solder jumper
         `+5V`→`EN` on the power sheet; the board runs from USB alone with the jumper closed
   - [ ] **Test points**: each supply rail (done on the power sheet: `+5V`, `+3V3`, `+3.3VA`,

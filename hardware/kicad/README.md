@@ -185,6 +185,12 @@ with no net number — index `[1]`, not `[2]`.
   `edit_sheet_pin`, then `validate_sheet_pins`.
 - Sheet boxes and pins must land on the 1.27 mm grid or every pin raises
   `endpoint_off_grid`; `batch_delete` by UUID is the only way to remove free text.
+- **`kicad-cli sch erc` does not report duplicate reference designators across sheets.**
+  A sheet annotated in isolation (MCU sheet, 2026-11-01: U1, R1, C1… colliding with the mag
+  and power sheets) passed ERC clean while the netlist merged pins of different parts.
+  After every annotation, parse the netlist `(components …)` block and assert every `ref`
+  is unique; `annotate_schematic` must be run with the project context so other sheets'
+  numbers are reserved.
 - `render_schematic_png` without `output` drops a PNG next to the schematic; always pass
   a scratch path. A wire routed straight through a foreign pin silently creates a
   junction (`find_shorted_nets` cannot see unnamed nets) — check coil nodes with
@@ -361,7 +367,7 @@ The RM3100 is a **discrete chipset, not a single package**:
 | Temp at accel | **SCA3300 internal die sensor** (TMP117 ×0–1 as board reference only) | — | 18.9 LSB/°C → **0.053 °C resolution**, read in the same SPI frame. Its ±10 °C *absolute* offset is irrelevant — compensation uses a per-unit curve against the reported value. Die temperature is the **correct** variable; an external sensor lags and misses package gradients |
 | MCU | **STM32U575RGT6** (LQFP-64, non-Q: LDO only, VCAP; LCSC C5270980). **STM32U585RIT6 is pin-identical** (adds crypto accelerators and 1 MB flash) and stays the drop-in upgrade | 1 | see below — the section is written for the U585; everything applies to the U575 except the crypto peripherals |
 | Regulator | **TPS7A2033PDBVR** (300 mA, 7 µVrms, high PSRR; LCSC C2862740, genuine TI only), **EN pin = the FFC `EN` line, high = on**, 100 k pull-down, bench jumper to `+5V` | 1 | **Never a buck** — switching current near a magnetometer is a field source. Replaces Rev A's PMOS gate. Analog rail `+3.3VA` by an **RC split (4.7 Ω + 22 µF), not a ferrite bead** (no magnetic material); the mag AVDD switches stay on `+3V3`. Inputs: `5V_FFC` and USB `VBUS` **Schottky OR-ed** (PMEG2010AEH). One regulator only — the MagI2C's 0.1 V AVDD/DVDD tracking rule forbids separate regulators |
-| Protection | **USB-C ESD array** (TPD4E05U06 class) + **TVS on both 5 V inputs** (SMF5V0A on `5V_FFC` and on `VBUS`) | 1 + 2 | Both at the rear, both silicon — no magnetic concern. Previously missing |
+| Protection | **USBLC6-2SC6** on the USB data pair (the port is a JST SH pigtail header, not a steel-shelled USB-C receptacle) + **TVS on both 5 V inputs** (SMF5V0A on `5V_FFC` and on `VBUS`) | 1 + 2 | Both at the rear, both silicon — no magnetic concern. Previously missing |
 | Decoupling at coils | **Non-magnetic MLCC** (Cu/Ag termination) | — | Standard MLCCs have ferromagnetic Ni barrier terminations |
 
 **Dropped:** SCHA63T (€200 for gyro performance that contributes nothing to static
