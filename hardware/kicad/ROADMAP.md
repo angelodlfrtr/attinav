@@ -630,11 +630,12 @@ placement later.
         shared, `CS_MAGn DRDY_MAGn AVDD_ENn TEMP_MAGn` per instance (dangling until the MCU
         sheet exists — expected ERC noise). Netlist verified: every coil node = coil pin +
         IN pin + resistor pin, in all three instances.
-  - [ ] **Open from the mag sheet:** `+3V3`/`GND` have no `power_out` driver yet → ERC
-        "power pin not driven" until the power sheet supplies the LDO output (add a
-        `PWR_FLAG` on GND there, not on the mag sheet). The `attinav` library symbols carry
-        **no default Footprint field** (footprints were set per instance) — set them in
-        `attinav.kicad_sym` so future placements inherit them.
+  - [x] ~~`+3V3`/`GND` "power pin not driven"~~ — resolved by the power sheet (LDO
+        `OUT` is `power_out`, `PWR_FLAG` on `GND`); confirmed gone in kicad-cli ERC.
+  - [ ] **Open from the mag sheet:** the `attinav` library symbols carry **no default
+        Footprint field** (footprints were set per instance and had to be restored once
+        after a manual redraw) — set them in `attinav.kicad_sym` (symbol editor) so future
+        placements inherit them.
 - [x] Read the PNI manual for REXT value (**33 kΩ**, R07 §4) — cycle-count configuration is
       firmware (CCX/CCY/CCZ registers), not schematic
 - [ ] Pin budget check before committing to the package. **Stock note (LCSC, Nov 2026):**
@@ -645,13 +646,24 @@ placement later.
 - [ ] **Design for bring-up** — needed now that there is no prototype:
   - [ ] **USB-C on the U585's USB OTG** — streaming raw counts during calibration
         development is far faster than BLE through a carrier that does not exist
-  - [ ] **Standalone bench power** — jumper or header so the board runs without a carrier
-  - [ ] **Test points**: each supply rail, SPI bus, DRDY per MagI2C
+  - [x] **Standalone bench power** — USB `VBUS` OR-ed into `+5V` and a solder jumper
+        `+5V`→`EN` on the power sheet; the board runs from USB alone with the jumper closed
+  - [ ] **Test points**: each supply rail (done on the power sheet: `+5V`, `+3V3`, `+3.3VA`,
+        `EN`, `GND`), SPI bus, DRDY per MagI2C (MCU sheet)
   - [ ] **Raw-count path in the protocol from day one** — calibration needs it
-- [ ] **Power path:** 5 V in → TVS → low-noise LDO; **the LDO's EN pin is `/EN`**. Drop
-      Rev A's PMOS gate (Q1) and its exposed-gate ESD problem. Split **AVDD/DVDD with a
-      ferrite bead from the same 3.3 V rail** — the MagI2C's 0.1 V tracking rule forbids
-      separate regulators. Per-triad AVDD via load switches (see H1 findings).
+- [x] **Power path — `power.kicad_sch`, done 2026-11-01.** `5V_FFC` and USB `VBUS` are
+      **Schottky OR-ed** (2× PMEG2010AEH, SOD-123F) into `+5V`, **TVS on each input**
+      (2× SMF5V0A), then **TPS7A2033PDBVR** (300 mA, 7 µVrms, high PSRR, 6 V max in; LCSC
+      C2862740 — genuine TI only, two clones share its `2AZF` marking) → `+3V3`.
+      10 µF in / 10 µF + 1 µF out. **`EN` high = on**, 100 kΩ pull-down (board off when the
+      carrier floats the line), **solder jumper `+5V`→`EN` for standalone bench power**.
+      Rev A's PMOS gate (Q1) is gone. `+3.3VA` for the accelerometers and VDDA is an
+      **RC split (4.7 Ω + 22 µF + 100 nF), not a ferrite bead** — no magnetic material,
+      ~60 mV drop at the ~12 mA analog load; the 0603 land takes a bead if ever wanted.
+      Mag AVDD switches stay on `+3V3` (MagI2C 0.1 V AVDD/DVDD tracking rule, and the coil
+      drive current would not tolerate the RC). PWR_FLAG on `+5V`, `+3.3VA`, `GND`; test
+      pads on every rail and `EN`. Root labels `5V_FFC`, `VBUS`, `EN` wait for the
+      interface and MCU sheets. Document the module current draw once the MCU sheet exists.
 - [ ] **No crystal, no RTC.** USB FS on HSI48 + CRS; SPI on the internal oscillator; the
       carrier sends wall-clock time at power-up and the module timestamps relatively.
 - [ ] **STM32U585 in LDO mode, no SMPS inductor.** Prefer a non-Q part. If a Q variant is

@@ -17,6 +17,16 @@
 	)
 	(wire
 		(pts
+			(xy 168.91 31.75) (xy 171.45 31.75)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "02b66765-c330-422b-abc4-706dd36e62d9")
+	)
+	(wire
+		(pts
 			(xy 40.64 30.48) (xy 43.18 30.48)
 		)
 		(stroke
@@ -44,6 +54,16 @@
 			(type default)
 		)
 		(uuid "2f60a39a-7fec-4c19-8726-27cfc76c1eaf")
+	)
+	(wire
+		(pts
+			(xy 168.91 34.29) (xy 171.45 34.29)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "35623a7b-2486-4c6f-b657-c6622f11764c")
 	)
 	(wire
 		(pts
@@ -184,6 +204,16 @@
 			(type default)
 		)
 		(uuid "d8f9c5e0-8e64-4976-8557-d18ff7b6e175")
+	)
+	(wire
+		(pts
+			(xy 168.91 29.21) (xy 171.45 29.21)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "e36f5f0e-6014-42ff-8ba4-47ba15716e11")
 	)
 	(wire
 		(pts
@@ -415,6 +445,36 @@
 		)
 		(uuid "cf95b93d-18ec-4280-bd51-09dc43760f07")
 	)
+	(label "EN"
+		(at 171.45 34.29 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "cfd8e701-9124-43bd-ad2d-db2a54280fa8")
+	)
+	(label "5V_FFC"
+		(at 171.45 29.21 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "eae8edd9-00a4-4cb3-aea5-1e9f511371de")
+	)
+	(label "VBUS"
+		(at 171.45 31.75 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "f4cbd678-6beb-40b5-ab37-06047c733543")
+	)
 	(label "SPI_SCLK"
 		(at 43.18 25.4 0)
 		(effects
@@ -424,6 +484,82 @@
 			(justify left bottom)
 		)
 		(uuid "fe8b22f3-23dd-4d9d-9d23-db40d8e4d532")
+	)
+	(sheet
+		(at 156.21 26.67)
+		(size 12.7 11.43)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(stroke
+			(width 0.1524)
+			(type solid)
+		)
+		(fill
+			(color 0 0 0 0)
+		)
+		(uuid "c2de824e-414e-4911-9215-11ba1d4820ab")
+		(property "Sheetname" "POWER"
+			(at 156.21 25.9584 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left bottom)
+			)
+		)
+		(property "Sheetfile" "power.kicad_sch"
+			(at 156.21 38.6846 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left top)
+			)
+		)
+		(pin "5V_FFC" passive
+			(at 168.91 29.21 0)
+			(uuid "c72fde94-f32a-40e2-9373-7f2c9b6a1fc0")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "VBUS" passive
+			(at 168.91 31.75 0)
+			(uuid "d672fa18-0540-4a58-98fb-f37b1d23561b")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "EN" input
+			(at 168.91 34.29 0)
+			(uuid "4f2779f3-2507-40df-96ad-ddbf889398b6")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(instances
+			(project "attinav"
+				(path "/17390514-7eab-48d7-a075-d99e4047bcae"
+					(page "5")
+				)
+			)
+		)
 	)
 	(sheet
 		(at 91.44 22.86)
