@@ -617,9 +617,26 @@ placement later.
 
 ## Phase 4 — Schematic
 
-- [ ] **Go hierarchical.** Rev A is one flat sheet with 113 symbols.
-- [ ] Sheets: power, MCU, magnetometer (**instantiated 3×**), accel, interface
-- [ ] Read the PNI manual for REXT value and cycle-count configuration
+- [x] **Go hierarchical.** Rev A is one flat sheet with 113 symbols. Root `attinav.kicad_sch`
+      (A4) now only holds sheet instances; all circuitry lives in child sheets.
+- [ ] Sheets: power, MCU, **magnetometer (instantiated 3× — done 2026-11-01)**, accel, interface
+  - [x] **`mag.kicad_sch` — RM3100 triad**, instanced as `MAG1..3` on the root. Per instance:
+        MagI2C 13156 (`attinav:RM3100_MagI2C`), 2× Sen-XY-f + 1× Sen-Z-f, **6× 121 Ω** in
+        series with each DRV pin (IN pins direct to the coil, Z polarity: ZINN ↔ pin `1_POL`),
+        **REXT 33 kΩ** to GND, 2× 100 nF on DVDD + 10 µF bulk, **AVDD via TPS22917DBV load
+        switch** (CT 1 nF, QOD open, EN = sheet pin `AVDD_EN`) with **solder-jumper bypass**,
+        1 µF + 100 nF on AVDD, **PT1000 (0603) + 10 kΩ 0.1 % divider → sheet pin `TEMP`**.
+        Sheet pins: `SCLK MOSI MISO SSN DRDY AVDD_EN TEMP`. Root nets: `SPI_SCLK/MOSI/MISO`
+        shared, `CS_MAGn DRDY_MAGn AVDD_ENn TEMP_MAGn` per instance (dangling until the MCU
+        sheet exists — expected ERC noise). Netlist verified: every coil node = coil pin +
+        IN pin + resistor pin, in all three instances.
+  - [ ] **Open from the mag sheet:** `+3V3`/`GND` have no `power_out` driver yet → ERC
+        "power pin not driven" until the power sheet supplies the LDO output (add a
+        `PWR_FLAG` on GND there, not on the mag sheet). The `attinav` library symbols carry
+        **no default Footprint field** (footprints were set per instance) — set them in
+        `attinav.kicad_sym` so future placements inherit them.
+- [x] Read the PNI manual for REXT value (**33 kΩ**, R07 §4) — cycle-count configuration is
+      firmware (CCX/CCY/CCZ registers), not schematic
 - [ ] Pin budget check before committing to the package. **Stock note (LCSC, Nov 2026):**
       the non-Q LQFP-64 **RIT6 is out of stock**; non-Q LQFP-144 ZIT6 has 3; Q variants
       LQFP-100 VIT6Q (60) and QFN-48 CIU6Q (10) are available. Options: consign RIT6 from

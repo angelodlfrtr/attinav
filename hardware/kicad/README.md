@@ -155,13 +155,40 @@ verification:
   does not resolve pin positions.
 - **`get_component_nets` / `trace_from_point` return `net: null`** for pins whose net
   comes from a power symbol rather than a label. They resolve nets from labels only.
-- **155 ERC + 45 DRC warnings** are all "library not found / not enabled" — this Nix
-  environment lacks the KiCad standard libs. Symbols resolve from the embedded cache,
-  so the 0-error results are genuine.
+- **155 ERC + 45 DRC warnings** were all "library not found / not enabled". Root cause
+  (found 2026-11-01): the Konnect MCP server entry in `~/.claude.json` hardcodes
+  `KICAD10_SYMBOL_DIR` / `KICAD10_FOOTPRINT_DIR` as Nix store paths, which go stale at
+  every rebuild that bumps `kicad-symbols` / `kicad-footprints`. Konnect also does not
+  follow KiCad 10's nested `(type "Table")` entry in the user's global lib tables, so
+  it had no fallback. Fixed by re-adding the server with the current paths (plus
+  `KICAD10_TEMPLATE_DIR`); the durable fix is to generate that entry from the Nix
+  package outputs. Symptom when it recurs: every stock `lib_id` fails with "no library
+  'Device' in the project or global sym-lib-table". Symbols still resolve from the
+  embedded cache, so 0-error results on existing sheets remain genuine.
 
 **Reliable method:** generate a real netlist with `kicad-cli` and parse it, and parse
 `.kicad_pcb` directly for geometry. Note KiCad 10 writes pad nets as `(net "NAME")`
 with no net number — index `[1]`, not `[2]`.
+
+### Konnect schematic-building notes (v0.13.0, learned on the mag sheet)
+
+- **Subagents bind to the Konnect server process alive at spawn.** After an MCP
+  reconnect, an already-spawned agent keeps talking to the old process (stale env, old
+  toolsets). Respawn agents after any reconnect; never let two agents write one sheet.
+- `register_*_library` with global scope **writes into `~/.config/kicad/10.0/*-lib-table`**
+  and there is no unregister tool. Do not let agents probe library paths this way.
+- `annotate_schematic` must run on the **file that owns the symbols** (child sheet); on
+  the root it no-ops. Place with `?` references — explicit numbers are kept and defeat
+  per-instance numbering on multi-instanced sheets.
+- `move_schematic_component` refuses symbols once they carry multi-instance paths; use
+  `move_region`. `edit_sheet` resize does not move sheet pins — re-place them with
+  `edit_sheet_pin`, then `validate_sheet_pins`.
+- Sheet boxes and pins must land on the 1.27 mm grid or every pin raises
+  `endpoint_off_grid`; `batch_delete` by UUID is the only way to remove free text.
+- `render_schematic_png` without `output` drops a PNG next to the schematic; always pass
+  a scratch path. A wire routed straight through a foreign pin silently creates a
+  junction (`find_shorted_nets` cannot see unnamed nets) — check coil nodes with
+  `trace_from_point` and the `kicad-cli` netlist.
 
 ---
 
