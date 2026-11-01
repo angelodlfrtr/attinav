@@ -101,8 +101,18 @@ An anomaly producing **35 nT is exactly 0.1°** — the whole azimuth budget. Fr
 that is a gradient of ~210 nT/m: only **2× margin at a 20 mm baseline, 5× at 50 mm**.
 So 40–50 mm baselines are worth paying board length for.
 
-Caveat: on a 40 mm-wide board the **transverse baseline is capped at ~25 mm**, so the
-gradiometer is anisotropic — gradients across the short axis are detected less sensitively.
+Three caveats on these numbers:
+
+- **The 2.1 nT figure assumes averaging works cleanly.** At cycle count 200 the RM3100's
+  LSB is ~13 nT, comparable to its noise, so quantisation limits how far averaging gets
+  you. Use a **higher cycle count (400+)** during the shot so the LSB sits well below the
+  noise. Treat 2.1 nT as optimistic by ~2× otherwise.
+- **Gradiometry only sees *nearby* iron.** A distant large mass or iron-bearing stratum
+  produces a near-uniform offset with negligible gradient — invisible at *any* baseline.
+  That case is caught by **|B|-vs-IGRF and dip-vs-IGRF**, which must ship alongside. See
+  [README → Use the redundancy actively](README.md#use-the-redundancy-actively-in-firmware).
+- On a 40 mm-wide board the **transverse baseline is capped at ~25 mm**, so the gradiometer
+  is anisotropic — gradients across the short axis are detected less sensitively.
 
 Also note this supersedes rule 4 ("spread as widely as the board allows") in
 [README → Magnetic hygiene rules](README.md#magnetic-hygiene-rules). Averaging makes
@@ -171,9 +181,13 @@ Changed from Rev A, which took 3.3 V_EXT directly.
 
 ### 1.6 — Why keep the gyro
 
-**Accelerometers cannot detect yaw rotation about the gravity vector** — and yaw is
-exactly what corrupts azimuth. If the instrument twists during magnetic integration, only
-the gyro sees it. €8 and 2.5 × 3 mm for a motion-validity flag on every shot.
+Accelerometers cannot detect rotation about the gravity vector — gravity is invariant under
+it. But the **magnetometer time-series can**, since B rotates in the body frame, so the
+gyro is *not* the only yaw-motion detector. Its genuine value is narrower but real: it
+detects motion **when the magnetic field itself is disturbed or changing**, at higher
+bandwidth, and independently of both other sensors — precisely the situation where the
+magnetometer-based check is least trustworthy. €8 and 2.5 × 3 mm for an independent
+motion-validity flag on every shot.
 
 ### Stackup — keep Rev A's
 
@@ -203,9 +217,9 @@ so the constraints are not lost, and hand it to whoever builds the instrument.
 | # | Requirement | Why |
 |---|---|---|
 | H1 | *Preferred, not blocking:* non-conductive section (POM/PEEK) over the magnetometer zone, ≥10 mm clearance to any aluminium | Eddy currents — **downgraded to low risk**, PNI is silent on non-ferrous metal. See [below](#h1--the-eddy-current-problem) |
-| H2 | **Machined** chassis providing a flat seating face + 2 dowel bosses, L ≥ 30 mm, reamed | Datum error scales as 2δ/L; a printed housing caps you at ~0.25° |
+| H2 | **Machined aluminium chassis recommended** — flat seating face + 2 dowel bosses, L ≥ 30 mm, reamed. **The hard requirement is dimensional *stability*, not locating precision** | With the board bonded (H12) and the sensor→sight-axis transform calibrated, dowel clearance is irrelevant; only later movement matters. See [below](#the-housing-requirement-corrected) |
 | H3 | **Non-magnetic dowels** — brass or ceramic | Hard iron 50 mm from the coils |
-| H4 | **No speaker, no vibration motor, anywhere.** Piezo buzzer only | Permanent magnets, and the motor's **moves** — not calibratable |
+| H4 | **No speaker, no vibration motor, anywhere.** Audible feedback only via a **piezoelectric element** — verify the part is genuinely piezo, not an electromagnetic buzzer sold as one | Permanent magnets, and the motor's **moves** — not calibratable |
 | H5 | **Captive LiPo pouch cell, not an 18650** | 18650s have **steel cans**. Pouch cells use aluminium laminate |
 | H6 | Battery **rearmost**, ≥100 mm from the coil zone | Its current varies with load |
 | H7 | Battery **not user-removable** | Swapping changes its hard-iron signature → voids calibration |
@@ -271,22 +285,46 @@ an eval board, bring the component toward one coil and watch the MagI2C reading.
 | 5 mil stencil, paste area much smaller than pad, to reduce tilt and misalignment | The SEN-Z tilt mitigation, confirmed |
 | Reflow per J-STD-020, peak <260 °C; opposite side may be wave-soldered afterwards | Process window |
 
-### Why machined, quantitatively
+### The housing requirement, corrected
 
-| Housing | δ (radial) | Datum error at L = 43 mm | Azimuth budget total |
+An earlier version of this section argued from θ ≈ 2δ/L that a printed housing "caps you
+at ~0.25°". **That argument was inconsistent with H12.** The 2δ/L analysis describes a
+*removable* board relocated by dowels. With the board **bonded and non-removable** (H12)
+and the sensor→sight-axis transform **calibrated** against a known azimuth (surveyed
+baseline or solar sighting), dowel clearance is irrelevant — the board sits wherever it
+sits, calibration measures that, and only *subsequent movement* matters.
+
+So the real requirement is **dimensional stability**, not locating precision:
+
+| Property | Machined aluminium | POM / PEEK | Printed polymer |
 |---|---|---|---|
-| Machined, reamed + ground dowel | 0.006 mm | 0.014° | **0.10°** |
-| SLA / MJF print | ~0.1 mm | 0.16° | 0.19° |
-| FDM print | ~0.2 mm | 0.25° | **0.27°** |
+| CTE | **~23 ppm/°C** | ~100 ppm/°C | 50–100+ ppm/°C, anisotropic |
+| Creep / moisture uptake | negligible | low | **significant** — SLA creeps, FDM absorbs water |
+| Thermal mass, gradient spreading | **high** | low | low |
 
-A printed housing makes itself the single largest error term — larger than all the
-sensors combined — and caps the instrument around 0.25–0.3°, i.e. Cavway X1 territory.
+Uniform expansion over a 20 °C transient is a *scale* change and harmless; what hurts is
+*asymmetric* movement, which polymers do and aluminium essentially does not. Aluminium
+also spreads thermal gradients across the accelerometers — directly attacking the
+budget's largest term. **Machined aluminium remains the recommendation**, but on
+stability and thermal grounds, not the 2δ/L number.
 
-**Escape hatch:** calibrate the sensor-to-sight-axis transform against a known azimuth
-(surveyed baseline or solar sighting). That converts the requirement from *precise* to
-*stable*, so a printed housing with a **potted** board could still reach target. Do this
-anyway even with a machined chassis — machining buys precision, calibration buys
-insensitivity to what is left.
+**Two acceptable paths:**
+
+1. **Machined chassis + dowels** — precision *and* stability. Calibrate the transform anyway;
+   machining buys precision, calibration buys insensitivity to what is left.
+2. **Any stable housing + bonded board + calibrated transform** — precision comes from
+   calibration; the housing need only not move. A printed housing is *possible* on this
+   path if stability is demonstrated over temperature and humidity. That demonstration is
+   real work, and polymers make it harder.
+
+**Where 2δ/L still applies:** if the module is ever **removed and refitted** (service,
+carrier swap), dowel precision sets the repeatability — and H12 says recalibrate anyway.
+
+| Fit | δ (radial) | θ at L = 43 mm |
+|---|---|---|
+| Reamed + ground dowel (H7/h6) | 0.006 mm | 0.014° |
+| Machined, loose | 0.02 mm | 0.047° |
+| Printed hole | ~0.15 mm | 0.40° |
 
 ### Assumed zoning
 
@@ -384,7 +422,11 @@ With no prototype, footprint correctness is only proven after fab. Treat accordi
 4. [ ] Sen-Z-f: **polarity indicator orientation is critical** (Sen-XY-f is insensitive).
        Follow the NED layout in manual Figure 4-4. Sen-Z-f **may be bottom-mounted** with
        ZDRVN/ZDRVP swapped — an option for managing its 6.35 mm height
-5. [ ] Accelerometers near the mechanical datum, close together (same temperature, same stress)
+5. [ ] Accelerometers near the mechanical datum, close together (same temperature, same
+       stress). **Orient each SCA3300 so the sight axis lies along its X or Y axis, never Z.**
+       Offset temperature dependency is ±10 mg on X/Y but **±15 mg on Z**, and inclination
+       error is dominated by the axis along the sight line — a free 1.5× on the budget's
+       largest term
 6. [ ] MCU, LDO, interface last
 7. [ ] Planes: **no pour keepout this time.** Keep GND under the coils, but route so no
        unrelated return current passes beneath them
@@ -464,7 +506,8 @@ foreclosed by building the module first.
    the most novel option.
 
 **Why this project is worth doing** (recorded so the motivation does not drift):
-gradiometric anomaly *measurement* rather than mere detection; open hardware resilience
+gradiometric *measurement* of nearby iron rather than mere detection (paired with IGRF
+magnitude and dip checks for distant anomalies, which gradiometry cannot see); open hardware resilience
 in an ecosystem that is one person deep twice over (DistoX2 discontinued, Cavway X1 a
 single developer); and temperature-compensated calibration, which appears unexploited
 commercially. Raw accuracy is the *weakest* justification — the instrument stops being

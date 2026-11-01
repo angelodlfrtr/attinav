@@ -235,11 +235,15 @@ RM3100 cycle count.
 redundant magnetometers, explicitly *"to detect calibration drift, malfunctions, and
 magnetic gradients"*):
 
-- **Magnetic gradiometry.** A uniform Earth field reads identically at all sensors.
-  Nearby iron — magnetite in the rock, a bolt, a steel carabiner — creates a
-  *gradient*. Spatially separated magnetometers that disagree after calibration flag
-  the station as disturbed. DistoX users guess at this; measuring it is a real
+- **Magnetic gradiometry — of *nearby* iron.** A uniform Earth field reads identically at
+  all sensors. Nearby iron — magnetite in the rock beside you, a bolt, a steel carabiner —
+  creates a *gradient*. Spatially separated magnetometers that disagree after calibration
+  flag the station as disturbed. DistoX users guess at this; measuring it is a real
   capability upgrade.
+  **Blind spot:** a large *distant* mass — a steel gate 3 m away, an iron-bearing stratum —
+  produces a nearly uniform offset with negligible gradient, and gradiometry cannot see it.
+  That case is caught only by the **|B|-vs-IGRF and dip-vs-IGRF** checks. Gradiometry is
+  one of three anomaly detectors, not *the* detector.
 - **Blunder detection.** You cannot redo a trip.
 - **2 detects disagreement; 3 lets you vote** and identify which sensor is wrong.
 
@@ -366,6 +370,11 @@ Reasons SCA3300 wins here:
 5. It is what BRIC4/BRIC5 ship, in this exact application.
 
 The ADXL355's lower noise density buys nothing, because the design is not noise-limited.
+
+**Orientation rule:** the SCA3300's offset temperature dependency is ±10 mg on X/Y but
+**±15 mg on Z**. Inclination of the sight axis is asin(a_sight / |a|), dominated by the
+error on the axis *along* the sight line. So mount each SCA3300 with **the sight axis on
+X or Y, never Z** — a free 1.5× on the budget's largest term.
 
 ### MCU: STM32U585
 
@@ -561,10 +570,16 @@ of 0.1°; only calibration realises it.
 
 Flag a shot when:
 
-- the 3 magnetometers disagree after calibration → **magnetic gradient, local iron**
+- the 3 magnetometers disagree after calibration → **magnetic gradient → *nearby* iron**
 - `|a| != 1 g` → accelerometer fault or motion
-- `|B| !=` the WMM/IGRF value for the cave's location → disturbed field
+- `|B| !=` the WMM/IGRF value for the cave's location → **uniform disturbance → *distant*
+  iron or regional anomaly** — invisible to the gradiometer
+- computed dip ≠ IGRF dip → same, and a cross-check on the mag↔accel calibration
 - the gyro reports motion during the integration window
+
+The first and third are **complementary, not redundant**: gradiometry sees what is near
+you; the IGRF magnitude check sees what is far away. Shipping one without the other
+leaves a class of anomaly undetected.
 
 ### Calibration with a smartphone
 
