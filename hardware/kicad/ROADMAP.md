@@ -60,20 +60,45 @@ One rigid PCB, 110 × 40 mm, spanning the non-conductive nose into the machined 
     └──────────────────────────────┴──────────────────────────────┘
       POM/PEEK nose (non-conductive)   machined aluminium chassis
       x = 0 … 55  magnetometers        x = 55 … 110  electronics
-      A–B 24mm, A–C / B–C ~40mm        datum dowels L ≈ 43 mm
+      A–B ~28 mm, A–C / B–C ~36 mm     datum dowels L ≈ 44 mm
                                                           carrier end →
 ```
 
 **Keep it one board.** The coils' orientation relative to the datum is then fixed by the
 FR4 itself, with no mechanical interface to drift.
 
+**Orient every triad with its MagI2C on the chassis (+x) side of its coils.** Each triad is
+an **8 × 20 mm block** — coils (8 × 8) + ≥5 mm gap (PNI: caps away from coils) + ASIC and
+decoupling (7 × 7). With the ASIC toward the chassis, triad C's envelope can end exactly
+at the nose boundary (x = 55) while its **coils end at x ≈ 43, leaving 12 mm of clearance
+to the aluminium** — satisfying H1's ≥10 mm without moving the boundary. It is also the
+right choice for SPI routing, since all three ASICs then face the MCU. A and B stacked at
+the nose tip, C at mid-height on the right, gives the baselines above — verified by
+placement calculation: A–B 28.0, A–C 35.8, dowel L 44.0 mm, θ 0.016°.
+
 Place `[G1] [G2]` adjacent so they share temperature and mechanical stress — that makes
 their disagreement a meaningful fault signal rather than a thermal artefact.
 
 ### Why 110 × 40 — and why it is not a minimum
 
-**The accuracy-limited minimum is ~70 × 35 mm.** Nothing in the error budget improves
-above roughly 75 × 35 mm:
+**Two different floors apply, and an earlier version of this section conflated them.**
+Each triad is an 8 × 20 mm block (see the orientation note above), and the hybrid housing
+puts the dowels in the chassis zone only, so two *serial* length requirements stack:
+
+- **Accuracy-only floor ≈ 65 × 40 mm** — dowel span L ≥ 30 mm in the chassis zone plus one
+  triad length in the nose. Gradiometry would be crippled (A–C ≈ 15 mm, ~1.5× margin).
+- **Useful-gradiometer floor ≈ 90 × 40 mm** — A–C ≥ 30 mm (3× margin on the 210 nT/m
+  threat) needs a ~48 mm nose, and L ≥ 30 mm needs a ~41 mm chassis. **35 mm width does
+  not work** at any reasonable length: A–B drops to 23 mm and L falls short.
+- **110 × 40 chosen** — ~20 mm of length slack over the gradiometer floor, A–C ≈ 36 mm,
+  3.6× margin, L = 44 mm. Raw component utilisation is only ~27 %, so *area* is not the
+  constraint — *length* is, because the two requirements are serial.
+
+A **one-piece aluminium housing** (acceptable since H1 was downgraded) lets the dowels
+span the whole board, removing the chassis-zone constraint; the floor then drops to
+roughly 75 × 40 mm.
+
+Nothing in the error budget improves above the accuracy-only floor:
 
 | Error term | Contribution | Scales with board size? |
 |---|---|---|
@@ -118,8 +143,10 @@ Also note this supersedes rule 4 ("spread as widely as the board allows") in
 [README → Magnetic hygiene rules](README.md#magnetic-hygiene-rules). Averaging makes
 baseline a soft constraint; **distance from the battery and laser is the hard one.**
 
-If the housing forces a shrink: ~85 × 35 mm costs detection sensitivity and nothing in
-the error budget. Below ~70 × 35 mm real compromises begin.
+If the housing forces a shrink: down to ~90 × 40 mm costs only ~6 mm of A–C baseline
+(3.6× → 3× margin) and nothing in the error budget. Below that, with the hybrid housing,
+either the dowel span or the gradiometer baseline must give — and keep the width at 40 mm
+either way.
 
 ### 1.1b — Datum (corrected)
 
@@ -418,7 +445,9 @@ With no prototype, footprint correctness is only proven after fab. Treat accordi
 3. [ ] Per cluster: **the three coils of a triad as close together as possible** (PNI:
        minimises gradient error across the triad), MagI2C within 10 cm, the two
        ASIC→coil traces routed as a tight pair, and **decoupling at the ASIC — capacitors
-       kept away from the coils**
+       kept away from the coils**. **Orient each triad with its MagI2C on the chassis (+x)
+       side** — keeps every coil ≥10 mm from the aluminium and points all three SPI runs at
+       the MCU
 4. [ ] Sen-Z-f: **polarity indicator orientation is critical** (Sen-XY-f is insensitive).
        Follow the NED layout in manual Figure 4-4. Sen-Z-f **may be bottom-mounted** with
        ZDRVN/ZDRVP swapped — an option for managing its 6.35 mm height
