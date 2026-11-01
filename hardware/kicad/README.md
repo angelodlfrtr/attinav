@@ -397,7 +397,7 @@ The F401 is functionally adequate but wrong for this instrument.
 | Core | Cortex-M4F @ 84 MHz | Cortex-M33 @ 160 MHz, DSP, FPU, TrustZone |
 | Flash | 512 KB | **2 MB, dual-bank** |
 | SRAM | 96 KB | **786 KB** |
-| Power class | performance line | **ultra-low-power, <30 µA/MHz**. **Non-Q variant (LDO mode)** — the "Q" part's internal SMPS is a switching regulator with an on-board inductor, which the no-buck rule forbids; its run-mode saving is moot because the core sleeps (LPBAM) during integration |
+| Power class | performance line | **ultra-low-power, <30 µA/MHz**. **LDO mode, no SMPS inductor on the board** — the "Q" part's SMPS is a switching regulator, which the no-buck rule forbids, and its run-mode saving is moot because the core sleeps (LPBAM) during integration. Prefer a non-Q part; if only a Q variant is in stock, run it LDO-only per AN5373 (VDDSMPS/VLXSMPS/VSSSMPS → VSS, 2.2 µF + 100 nF on VDD11, no inductor, `REGSEL = 0`). The rule is about the inductor, not the silicon |
 | Autonomous DMA | — | **LPBAM** |
 
 - **786 KB SRAM** makes the full 56-shot nonlinear least-squares calibration solve
@@ -438,11 +438,16 @@ Scale reference: **10 mA at 10 mm ≈ 200 nT**. Against 20 µT horizontal that i
    (PNI: *"keep capacitors, especially tantalum capacitors, far away from the sensor
    coils"*); keep
    unrelated return currents out of the region.
-2. **Surface finish: immersion silver or OSP. NOT ENIG.** Electroless *Nickel*
-   Immersion Gold deposits 3–6 µm of ferromagnetic nickel on every exposed pad. Rev A
-   has `copper_finish "None"` — unspecified, so the fab chooses, and for 6-layer that
-   is usually ENIG. TI states the same requirement for the DRV425: *"select
-   non-magnetizable materials for the PCB and passives in the direct vicinity"*.
+2. **Surface finish: OSP. NOT ENIG.** Electroless *Nickel* Immersion Gold deposits
+   3–6 µm of ferromagnetic nickel on every exposed pad. Rev A has `copper_finish "None"`
+   — unspecified, so the fab chooses, and for 6-layer that is usually ENIG. TI states the
+   same requirement for the DRV425: *"select non-magnetizable materials for the PCB and
+   passives in the direct vicinity"*.
+   **At JLCPCB the choice is forced and favourable:** 6-layer boards are offered only in
+   **OSP or ENIG** — no HASL (planarity), no immersion silver. OSP is an organic coating
+   with no metal at all, the flattest finish for the 0.4 mm-pitch MLF, and carries no
+   surcharge. Caveats: ~6-month shelf life and bare copper on any later hand rework, so
+   **order fab and assembly together** and don't stockpile bare boards.
 3. **Non-magnetic hardware**: brass, titanium or nylon M2. Rev A's H1/H2 sit 12.3 mm
    from the magnetometer — a steel screw there is a large hard-iron source *and* a
    removable one that voids calibration when retorqued or swapped.

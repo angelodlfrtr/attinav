@@ -19,12 +19,12 @@ the module depends on, not a design. See also
 | Rev B approach | **Full 3× board directly**, no 1× prototype | Risk shifted into the design — see [Risk register](#risk-register) |
 | Magnetometer | 3× PNI RM3100 sensor suite | Gradiometry + voting |
 | Accelerometer | 2× Murata SCA3300-D01, Mode 4 | `\|a\|=1g` is a free third vote |
-| MCU | STM32U585, **non-Q (LDO mode)** | **On-device calibration is a requirement, not a fallback.** The "Q" SMPS is a switching regulator on the board — forbidden by the no-buck rule, and moot since the core sleeps during integration |
+| MCU | STM32U585, **LDO mode — no SMPS inductor fitted** | **On-device calibration is a requirement, not a fallback.** The SMPS is a switching regulator — forbidden by the no-buck rule, and moot since the core sleeps during integration. Non-Q preferred; a Q variant is acceptable wired LDO-only per AN5373, since non-Q LQFP-64 (RIT6) is out of stock at LCSC |
 | Gyro | 1× TDK ICM-42688-P | Motion gating only, not azimuth |
 | Dropped | SCHA63T, DRV425, ADXL355, LM94021, crystal, **2× TMP117**, **PMOS `/EN` gate (Q1)** | Reasons in README. TMP117: the SCA3300 die sensor is the correct compensation source. PMOS: the LDO's EN pin does the job |
 | 3D scan / LiDAR integration | **Parked** | Carrier-level feature, needs no module changes |
 | Smartphone | **Bench tool + reference source only** | Magnetic screening and IGRF/solar lookup. **No app to be written** — on-device solving makes it redundant, and the cave ecosystem is Android |
-| Surface finish | Immersion silver or OSP — **never ENIG** | Nickel is ferromagnetic |
+| Surface finish | **OSP** — **never ENIG** | Nickel is ferromagnetic. JLCPCB 6-layer offers only OSP or ENIG, so OSP is both the rule and the only option |
 
 ---
 
@@ -244,7 +244,7 @@ so the constraints are not lost, and hand it to whoever builds the instrument.
 | # | Requirement | Why |
 |---|---|---|
 | H1 | *Preferred, not blocking:* non-conductive section (POM/PEEK) over the magnetometer zone, ≥10 mm clearance to any aluminium | Eddy currents — **downgraded to low risk**, PNI is silent on non-ferrous metal. See [below](#h1--the-eddy-current-problem) |
-| H2 | **Machined aluminium chassis recommended** — flat seating face + 2 dowel bosses, L ≥ 30 mm, reamed. **The hard requirement is dimensional *stability*, not locating precision** | With the board bonded (H12) and the sensor→sight-axis transform calibrated, dowel clearance is irrelevant; only later movement matters. See [below](#the-housing-requirement-corrected) |
+| H2 | **Machined aluminium chassis recommended** — flat seating face + 2 dowel bosses, L ≥ 30 mm. **The hard requirement is dimensional *stability*, not locating precision** | With the board bonded (H12) and the sensor→sight-axis transform calibrated, dowel clearance is irrelevant; only later movement matters. **JLCPCB drills to ±0.075 mm position, so the PCB's own holes cannot be precision locators** — bond + calibrate is the working path. See [below](#the-housing-requirement-corrected) |
 | H3 | **Non-magnetic dowels** — brass or ceramic | Hard iron 50 mm from the coils |
 | H4 | **No speaker, no vibration motor, anywhere.** Audible feedback only via a **piezoelectric element** — verify the part is genuinely piezo, not an electromagnetic buzzer sold as one | Permanent magnets, and the motor's **moves** — not calibratable |
 | H5 | **Captive LiPo pouch cell, not an 18650** | 18650s have **steel cans**. Pouch cells use aluminium laminate |
@@ -335,14 +335,20 @@ also spreads thermal gradients across the accelerometers — directly attacking 
 budget's largest term. **Machined aluminium remains the recommendation**, but on
 stability and thermal grounds, not the 2δ/L number.
 
-**Two acceptable paths:**
+**Two acceptable paths — and JLCPCB fabrication decides between them:**
 
-1. **Machined chassis + dowels** — precision *and* stability. Calibrate the transform anyway;
-   machining buys precision, calibration buys insensitivity to what is left.
-2. **Any stable housing + bonded board + calibrated transform** — precision comes from
-   calibration; the housing need only not move. A printed housing is *possible* on this
-   path if stability is demonstrated over temperature and humidity. That demonstration is
-   real work, and polymers make it harder.
+1. **Machined chassis + precision dowels** — precision *and* stability. **Not available as
+   drawn with JLCPCB-drilled holes**: hole position tolerance is ±0.075 mm and NPTH
+   diameter ±0.05–0.08 mm, so the board-side holes alone give δ ≈ 0.1 mm radial and
+   θ ≈ 0.26° at L = 44 mm. To use this path the PCB holes must be **drilled undersize at
+   fab and match-drilled or reamed in the housing fixture** after assembly. Extra process;
+   only worth it if the module must be removable.
+2. **Stable housing + bonded board + calibrated transform** — **the default with JLCPCB.**
+   Precision comes from calibration; the housing need only not move. The chassis dowels
+   become assembly aids, not locators. A printed housing is *possible* on this path if
+   stability is demonstrated over temperature and humidity; that demonstration is real
+   work, and polymers make it harder. Machined aluminium is still recommended for
+   stability and thermal mass.
 
 **Where 2δ/L still applies:** if the module is ever **removed and refitted** (service,
 carrier swap), dowel precision sets the repeatability — and H12 says recalibrate anyway.
@@ -373,13 +379,76 @@ distance, but inline avoids the complexity.
 
 ---
 
+## Manufacturing at JLCPCB
+
+The board is drawn by hand and fabricated **and assembled** at JLCPCB. These are the fab's
+constraints treated as design inputs, verified Nov 2026 — recheck the live quote tool at
+order time; they move.
+
+### Decisions this forces
+
+| Item | JLCPCB reality | Consequence |
+|---|---|---|
+| **Surface finish** | 6-layer: **OSP or ENIG only**. No HASL (planarity), no immersion silver | **OSP.** Non-metallic, flattest for the 0.4 mm MLF, no surcharge. Order fab + assembly together (OSP shelf life ~6 months, bare copper on rework) |
+| **Stackup** | **JLC06161H-3313**: 35 µm outer, **15.2 µm (0.5 oz) inner**; 3313 0.099 / core 0.55 / **2116 0.109** / core 0.55 / 3313 0.099 mm | Rev A's intent, confirmed. In2/In3 (L3/L4) sit across the 0.109 mm 2116 — the tight plane pair survives. Inner copper is 0.5 oz, not 1 oz |
+| **Assembly tier** | Economic honours no process requests; 6-layer + fine pitch + special paste + consignment | **Standard PCBA** |
+| **Datum** | Hole position ±0.075 mm; NPTH ±0.05–0.08 mm | PCB holes cannot be precision locators → **bond + calibrate** (housing path 2). See [H2](#housing-and-system-requirements) |
+| **Edge clearance** | Component body ≥ **2.5 mm** from board edge | Floorplan used 2 mm: A–B becomes 27 mm, nothing else changes |
+| **Footprint density** | IPC-7351B **medium or low** only | Courtyards accordingly; PNI's reduced-paste apertures go on the paste layer in your footprints |
+
+### Design rules (6-layer)
+
+| Rule | JLCPCB | Use |
+|---|---|---|
+| Min trace / space | 0.09 mm | 0.15 mm |
+| Via drill / diameter | 0.15 / 0.25 mm | 0.3 / 0.5 mm (Rev A) |
+| Drill size tolerance | +0.13 / −0.08 mm | — |
+| Hole position tolerance | ±0.075 mm | drives the datum decision |
+| SMD pad-to-pad (different nets) | 0.15 mm | — |
+| Via / NPTH to track | 0.2 mm | — |
+| Annular ring | via 0.05 (0.075 rec.), other 0.13, PTH 0.3 mm | — |
+| Outline | ±0.1 mm precision / ±0.2 regular | request precision |
+
+### Part sourcing status
+
+| Part | JLCPCB / LCSC | Status (Nov 2026) | Action |
+|---|---|---|---|
+| **RM3100** (coils + MagI2C) | LCSC C464558 | Listed; **JLCPCB assembly status unconfirmed** — part page unreadable. Odd-form 6.35 mm solenoid risks *"large and difficult to process"* rejection | Check in parts library / pre-order. Fallback: **consign** |
+| **SCA3300-D01-1** | JLCPCB C2655105 | **364 in stock**, SMT, Economic & Standard. *"PCB assembly fixture needed to protect and support this part"* | Order through JLCPCB; expect a fixture charge |
+| **STM32U585** | LCSC | Non-Q LQFP-64 RIT6 **out of stock**; ZIT6 ×3; Q variants VIT6Q ×60, CIU6Q ×10 | Consign RIT6 from ST eStore, or VIT6Q wired LDO-only (Phase 4) |
+| **ICM-42688-P** | JLCPCB C54308212 | **Tokmas clone only**; genuine TDK not stocked | Role is a motion flag, so the clone is tolerable — but **consign genuine** since you are consigning anyway |
+| **TPS7A2033PDBVR** | LCSC C2862740 | 153 k in stock, Extended part | Order; accept the loading fee |
+| Pt1000 non-magnetic, ESD array, TVS | — | Verify at order time | — |
+
+### Consignment
+
+Overseas parts ship to JLCPCB's **Hong Kong warehouse** under the compliant consignment
+flow. Only parts with a JLC number (or engineer approval for a new part) can be consigned;
+a consigned part number **cannot be mixed** with the JLCPCB-stocked same part in one order;
+~**$45 customs handling** per parcel (<5000 CNY), duties on you; packaging instructions
+appear in the order flow and are strict. Consigned parts are not tested. Budget one
+consignment parcel per build covering the RM3100 sets, genuine gyro, and any non-stock MCU.
+
+### Solder paste
+
+No halide-free option exists as a checkbox. **Standard PCBA**, state **ROL0 / halide-free
+required for PNI coils** in the PCBA Remark, and open a ticket before production for
+written confirmation. Their Type 4 lead-free no-clean paste is *probably* ROL0; do not
+assume.
+
+---
+
 ## Phase 2 — Parts
 
 - [ ] **Order RM3100 parts.** Primary: [cavedevice.com](https://cavedevice.com/products/magnetometer-sensor-rm3100-set-by-pni)
       — €20/kit, individual parts from €4, **no MOQ**, EU shipping. Confirm stock first.
-- [ ] **Check whether LCSC C464558 is available for JLCPCB assembly.** If yes this is
-      significant: it hands the SEN-Z placement-tilt risk to a professional pick-and-place
-      instead of your own assembly.
+- [ ] **Check whether LCSC C464558 is available for JLCPCB assembly** — in the JLCPCB
+      parts library or via the "pre-order" flow; the public part page is a JS shell and
+      could not be read. If yes this is significant: it hands the SEN-Z placement-tilt risk
+      to a professional pick-and-place. **Risk:** JLCPCB's T&Cs reject *"parts that are
+      large and difficult to process"*, and a 6.35 mm solenoid is an odd-form part — expect
+      hand placement or refusal. **Fallback:** consign the coils and ASICs (see
+      [Manufacturing at JLCPCB](#manufacturing-at-jlcpcb)).
 - [ ] Order for **3+ board builds**, not 1. Murata lead times are the schedule risk, and
       multiple units let you characterise part-to-part spread for the error budget.
 - [ ] Source **non-magnetic MLCCs** (Cu/Ag termination) **only where a capacitor must sit
@@ -388,6 +457,11 @@ distance, but inline avoids the complexity.
       there.
 - [ ] Confirm the assembler can use **halide-free solder paste** — PNI requires it for the
       sensor coils, for both reflow and cleaning. Non-negotiable and easy to miss.
+      **At JLCPCB there is no checkbox for this.** Their line uses Type 4 lead-free
+      paste; standard no-clean is usually ROL0 (halide-free) but is not guaranteed. Route:
+      **Standard PCBA tier only** (Economic honours no process requests), state the ROL0
+      requirement in the **PCBA Remark** field, and open a support ticket before
+      production to get written confirmation.
 - [ ] **Pt1000 ×3 in a verified non-magnetic package.** SMD thin-film RTDs typically carry
       Ni-barrier terminations like MLCCs — the platinum element is clean, the package may
       not be. Leaded element or confirmed Cu/Ag terminations.
@@ -424,8 +498,9 @@ With no prototype, footprint correctness is only proven after fab. Treat accordi
 - [ ] SCA3300-D01 symbol + footprint (12-pin pre-molded, 8.6 × 7.6 × 3.3 mm)
 - [ ] Pt1000 symbol — footprint per the chosen **non-magnetic package** (leaded or verified
       Cu/Ag terminations), not a generic 0603
-- [ ] Verify STM32U585 **non-Q** in `MCU_ST_STM32U5`; check ICM-42688-P, the ESD array and
-      TVS; TMP117 only if the single board-reference unit is kept
+- [ ] Verify the chosen STM32U585 variant in `MCU_ST_STM32U5` (see the stock note in
+      Phase 4); check ICM-42688-P, the ESD array and TVS; TMP117 only if the single
+      board-reference unit is kept
 - [ ] **Verify every footprint against the physical parts in hand** before releasing
       gerbers — 1:1 paper printouts, parts laid on top, calipers on the MLF. This is the
       step a prototype would have caught for you.
@@ -437,7 +512,11 @@ With no prototype, footprint correctness is only proven after fab. Treat accordi
 - [ ] **Go hierarchical.** Rev A is one flat sheet with 113 symbols.
 - [ ] Sheets: power, MCU, magnetometer (**instantiated 3×**), accel, interface
 - [ ] Read the PNI manual for REXT value and cycle-count configuration
-- [ ] Pin budget check against LQFP64 before committing to the package
+- [ ] Pin budget check before committing to the package. **Stock note (LCSC, Nov 2026):**
+      the non-Q LQFP-64 **RIT6 is out of stock**; non-Q LQFP-144 ZIT6 has 3; Q variants
+      LQFP-100 VIT6Q (60) and QFN-48 CIU6Q (10) are available. Options: consign RIT6 from
+      the ST eStore (in stock), or take **VIT6Q (LQFP-100, 14 × 14 mm) wired LDO-only** —
+      the board has room. QFN-48 is pin-marginal for 3× CS/DRDY + 2× CS + UART + USB + SWD
 - [ ] **Design for bring-up** — needed now that there is no prototype:
   - [ ] **USB-C on the U585's USB OTG** — streaming raw counts during calibration
         development is far faster than BLE through a carrier that does not exist
@@ -450,8 +529,11 @@ With no prototype, footprint correctness is only proven after fab. Treat accordi
       separate regulators. Per-triad AVDD via load switches (see H1 findings).
 - [ ] **No crystal, no RTC.** USB FS on HSI48 + CRS; SPI on the internal oscillator; the
       carrier sends wall-clock time at power-up and the module timestamps relatively.
-- [ ] **STM32U585 non-Q.** Confirm the ordered part number has no "Q" — the SMPS variant
-      puts a switching inductor on the board.
+- [ ] **STM32U585 in LDO mode, no SMPS inductor.** Prefer a non-Q part. If a Q variant is
+      used, wire it LDO-only per **AN5373**: VDDSMPS, VLXSMPS and VSSSMPS → VSS; each VDD11
+      pin → 2.2 µF + 100 nF to GND; **no 2.2 µH inductor**; leave `PWR_CR3.REGSEL = 0`
+      (LDO is the reset default). The no-buck rule is about the inductor on the board,
+      not the silicon.
 
 ---
 
@@ -487,9 +569,12 @@ With no prototype, footprint correctness is only proven after fab. Treat accordi
 ## Phase 6 — Verification
 
 - [ ] Set real design rules — fix Rev A's `min_clearance: 0.0` and `min_track_width: 0.0`
-      to the fab's actual capability
-- [ ] **Specify surface finish explicitly.** Rev A has `copper_finish "None"`, which lets
-      the fab choose ENIG and its 3–6 µm of ferromagnetic nickel
+      to JLCPCB's 6-layer capability (table in
+      [Manufacturing at JLCPCB](#manufacturing-at-jlcpcb)). Suggested: clearance 0.15,
+      track 0.15, via 0.3/0.5 as Rev A, NPTH ±0.08, hole position ±0.075
+- [ ] **Set `copper_finish` to OSP** in the board stackup. Rev A has `"None"`, which lets
+      the fab choose ENIG and its 3–6 µm of ferromagnetic nickel. Select
+      **JLC06161H-3313** as the stackup
 - [ ] Verify via `kicad-cli` netlist parsing, **not** the audit tools
       (see README → Tooling caveats)
 - [ ] 3D check: SEN-Z is 6.35 mm tall, taller than anything on Rev A
