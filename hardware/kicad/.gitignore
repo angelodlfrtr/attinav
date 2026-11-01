@@ -46,3 +46,6 @@ out/
 /gerber*
 /fab
 *.lck
+
+# Editor local-history extension
+.history/
