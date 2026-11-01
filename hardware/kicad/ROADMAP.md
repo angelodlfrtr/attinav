@@ -409,6 +409,54 @@ order time; they move.
 | Annular ring | via 0.05 (0.075 rec.), other 0.13, PTH 0.3 mm | — |
 | Outline | ±0.1 mm precision / ±0.2 regular | request precision |
 
+### KiCad Board Setup — values to enter
+
+Ready for transcription into **Board Setup** (or a Konnect `set_design_rules` /
+stackup call). Do this in the project Rev B is actually drawn in — board setup lives in
+the `.kicad_pcb`/`.kicad_pro`, so a fresh project does not inherit it.
+
+**Design Rules → Constraints** (fixes Rev A's `0.0` globals)
+
+| Field | Value | Note |
+|---|---|---|
+| Minimum clearance | **0.15 mm** | JLCPCB 0.09; netclass 0.2 still governs normal routing |
+| Minimum track width | **0.15 mm** | JLCPCB 0.09 |
+| Minimum via diameter | **0.45 mm** | Rev A's smallest; JLCPCB 0.25 |
+| Minimum via hole | **0.3 mm** | JLCPCB 0.15, but ≤0.25 mm drills carry a surcharge |
+| Minimum annular width | 0.075 mm | keep Rev A; JLCPCB via 0.05 min / 0.075 rec. |
+| Minimum through hole | 0.3 mm | keep |
+| Copper to hole clearance | 0.25 mm | keep |
+| Copper to edge clearance | 0.25 mm | keep |
+| Hole to hole clearance | 0.25 mm | keep — but **check PTH-to-PTH ≥ 0.45 mm by eye**; KiCad has one field, JLCPCB has two limits (via 0.2, PTH pad 0.45) |
+
+**Net Classes** — keep Rev A's, they are JLCPCB-safe
+
+| Class | Clearance | Track | Via dia / drill |
+|---|---|---|---|
+| Default | 0.2 | 0.25 | 0.6 / 0.3 |
+| Power | 0.2 | 0.7 | 1.0 / 0.5 |
+
+**Physical Stackup** — 6 copper layers, 1.6 mm, **JLC06161H-3313**
+
+| Layer | Type | Material | Thickness | Note |
+|---|---|---|---|---|
+| F.Cu | copper | — | **0.035** | 1 oz |
+| — | prepreg | **3313**, εr 4.1 | **0.0994** | was 0.1 |
+| In1.Cu | copper | — | **0.0152** | **0.5 oz** — was 0.035 |
+| — | core | FR4 | **0.55** | was 0.535 |
+| In2.Cu | copper | — | **0.0152** | 0.5 oz |
+| — | prepreg | **2116** | **0.1088** | the In2/In3 plane pair gap; was 0.1 |
+| In3.Cu | copper | — | **0.0152** | 0.5 oz |
+| — | core | FR4 | **0.55** | |
+| In4.Cu | copper | — | **0.0152** | 0.5 oz |
+| — | prepreg | **3313**, εr 4.1 | **0.0994** | |
+| B.Cu | copper | — | **0.035** | 1 oz |
+
+Sums to ~1.54 mm copper + dielectric, ~1.56 mm with mask — JLCPCB's "1.6 mm" nominal.
+
+**Copper finish: `OSP`** (KiCad's dropdown has it; Rev A is `None`). Solder mask colour
+and silkscreen as you like — neither is magnetically relevant.
+
 ### Part sourcing status
 
 | Part | JLCPCB / LCSC | Status (Nov 2026) | Action |
