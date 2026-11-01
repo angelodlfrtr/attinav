@@ -19,7 +19,7 @@ the module depends on, not a design. See also
 | Rev B approach | **Full 3× board directly**, no 1× prototype | Risk shifted into the design — see [Risk register](#risk-register) |
 | Magnetometer | 3× PNI RM3100 sensor suite | Gradiometry + voting |
 | Accelerometer | 2× Murata SCA3300-D01, Mode 4 | `\|a\|=1g` is a free third vote |
-| MCU | STM32U585, **LDO mode — no SMPS inductor fitted** | **On-device calibration is a requirement, not a fallback.** The SMPS is a switching regulator — forbidden by the no-buck rule, and moot since the core sleeps during integration. Non-Q preferred; a Q variant is acceptable wired LDO-only per AN5373, since non-Q LQFP-64 (RIT6) is out of stock at LCSC |
+| MCU | **STM32U575RGT6** (LQFP-64, non-Q = LDO only; LCSC C5270980), U585RIT6 pin-identical drop-in; **no SMPS, no inductor** | **On-device calibration is a requirement, not a fallback.** The SMPS is a switching regulator — forbidden by the no-buck rule, and moot since the core sleeps during integration. Non-Q preferred; a Q variant is acceptable wired LDO-only per AN5373, since non-Q LQFP-64 (RIT6) is out of stock at LCSC |
 | Gyro | 1× TDK ICM-42688-P | Motion gating only, not azimuth |
 | Dropped | SCHA63T, DRV425, ADXL355, LM94021, crystal, **2× TMP117**, **PMOS `/EN` gate (Q1)** | Reasons in README. TMP117: the SCA3300 die sensor is the correct compensation source. PMOS: the LDO's EN pin does the job |
 | 3D scan / LiDAR integration | **Parked** | Carrier-level feature, needs no module changes |
@@ -500,7 +500,7 @@ and silkscreen as you like — neither is magnetically relevant.
 |---|---|---|---|
 | **RM3100** (coils + MagI2C) | LCSC C464558 | Listed; **JLCPCB assembly status unconfirmed** — part page unreadable. Odd-form 6.35 mm solenoid risks *"large and difficult to process"* rejection | Check in parts library / pre-order. Fallback: **consign** |
 | **SCA3300-D01-1** | JLCPCB C2655105 | **364 in stock**, SMT, Economic & Standard. *"PCB assembly fixture needed to protect and support this part"* | Order through JLCPCB; expect a fixture charge |
-| **STM32U585** | LCSC | Non-Q LQFP-64 RIT6 **out of stock**; ZIT6 ×3; Q variants VIT6Q ×60, CIU6Q ×10 | Consign RIT6 from ST eStore, or VIT6Q wired LDO-only (Phase 4) |
+| **MCU — STM32U575RGT6** (decided 2026-11-01) | **LCSC C5270980** | Non-Q LQFP-64, 1 MB flash, 784 KB RAM; **41 in stock** at ~$5.24, JLCPCB Extended part. Pin-identical to U585RIT6 (U585 = U575 + crypto accelerators, not needed). U585RIT6 (C5271042) out of stock at LCSC, in stock at ST eStore only | **Buy the needed units now** (stock is thin). U585RIT6 is a zero-change drop-in upgrade. No MCU consignment. Verify the listing is ST-branded, not the GD32F527 "similar" part |
 | **ICM-42688-P** | JLCPCB C54308212 | **Tokmas clone only**; genuine TDK not stocked | Role is a motion flag, so the clone is tolerable — but **consign genuine** since you are consigning anyway |
 | **TPS7A2033PDBVR** | LCSC C2862740 | 153 k in stock, Extended part | Order; accept the loading fee |
 | Pt1000 non-magnetic, ESD array, TVS | — | Verify at order time | — |
@@ -586,7 +586,7 @@ project tables. Only the physical-part check below remains.
 | SCA3300-D01 | `attinav:SCA3300-D01` (Table 6) | `attinav:Murata_SCA3300-D01` | Doc 3165 Fig 10: 0.61×0.98, pitch 1.0, rows 7.87 apart |
 | ICM-42688-P | `attinav:ICM-42688-P` (DS v1.9 Table 10) | **stock** `Package_LGA:LGA-14_3x2.5mm_P0.5mm_LayoutBorder3x4y` | 4-3-4-3 CCW matches TDK D1=1.5 / E1=1.0; no centre pad (TDK: must not be soldered). **Verify the pin-1 corner against DS Fig 5 at placement** |
 | Pt1000 | **stock** `Sensor_Temperature:PT1000` | stock 0603/0805 per the chosen non-magnetic package | — |
-| STM32U585, TPS7A20, TMP117 | stock `STM32U585RITx` / `VITxQ`, `TPS7A20xxxDBV`, `TMP117xxDRV` | stock LQFP-64/-100, SOT-23-5, WSON-6 1.5×1.5 | verified present in the installed libraries |
+| STM32U575RGT6 (U585RIT6 drop-in), TPS7A20, TMP117 | stock `MCU_ST_STM32U5:STM32U575RGTx` (same pinout as `STM32U585RITx`), `TPS7A20xxxDBV`, `TMP117xxDRV` | stock LQFP-64, SOT-23-5, WSON-6 1.5×1.5 | verified present in the installed libraries |
 
 Verified three ways: Konnect readback of pads and pins, `kicad-cli fp/sym export` (KiCad's own
 parser accepts every file), and rendered inspection of all four footprints. Courtyards came
@@ -638,11 +638,17 @@ placement later.
         placements inherit them.
 - [x] Read the PNI manual for REXT value (**33 kΩ**, R07 §4) — cycle-count configuration is
       firmware (CCX/CCY/CCZ registers), not schematic
-- [ ] Pin budget check before committing to the package. **Stock note (LCSC, Nov 2026):**
-      the non-Q LQFP-64 **RIT6 is out of stock**; non-Q LQFP-144 ZIT6 has 3; Q variants
-      LQFP-100 VIT6Q (60) and QFN-48 CIU6Q (10) are available. Options: consign RIT6 from
-      the ST eStore (in stock), or take **VIT6Q (LQFP-100, 14 × 14 mm) wired LDO-only** —
-      the board has room. QFN-48 is pin-marginal for 3× CS/DRDY + 2× CS + UART + USB + SWD
+- [x] **Package and variant decided (2026-11-01): STM32U575RGT6, LQFP-64, non-Q (LDO
+      only, VCAP pin).** LCSC C5270980 in stock; the U585RIT6 is pin-identical and remains
+      the drop-in upgrade. Superseded options: consigning the U585RIT6, or the LQFP-100
+      VIT6Q wired LDO-only. QFN-48 was pin-marginal for 3× CS/DRDY + 2× CS + UART + USB + SWD.
+      **Q/non-Q are not interchangeable on one footprint** (DS13737 Fig. 11/12): pins 24–27
+      shift (PC4/PC5/PB0/PB1 → PB0/PB1/PB2/PB10), 28/29 become VLXSMPS/VDDSMPS, 30 VCAP →
+      VSSSMPS, 31 VSS → VDD11, 32 VDD → VSS, 33 PB12 → VDD, 62 PB9 → VDD11. A dual-fit
+      layout is possible (ground 28/29, VDD on 33, 2.2 µF on 62, solder-jumper options on
+      30/31/32, PB2/PB9/PB10/PB12 sacrificed) but not worth it while the Q LQFP-64 is the
+      scarcer part — keep as a future option only.
+- [ ] Pin budget check on the LQFP-64 while drawing the MCU sheet
 - [ ] **Design for bring-up** — needed now that there is no prototype:
   - [ ] **USB-C on the U585's USB OTG** — streaming raw counts during calibration
         development is far faster than BLE through a carrier that does not exist
@@ -666,8 +672,9 @@ placement later.
       interface and MCU sheets. Document the module current draw once the MCU sheet exists.
 - [ ] **No crystal, no RTC.** USB FS on HSI48 + CRS; SPI on the internal oscillator; the
       carrier sends wall-clock time at power-up and the module timestamps relatively.
-- [ ] **STM32U585 in LDO mode, no SMPS inductor.** Prefer a non-Q part. If a Q variant is
-      used, wire it LDO-only per **AN5373**: VDDSMPS, VLXSMPS and VSSSMPS → VSS; each VDD11
+- [ ] **STM32U575RGT6 is a non-Q part: internal LDO only, 4.7 µF on VCAP, no SMPS pins,
+      no inductor.** The AN5373 LDO-only wiring below applies only if a Q variant is ever
+      substituted: VDDSMPS, VLXSMPS and VSSSMPS → VSS; each VDD11
       pin → 2.2 µF + 100 nF to GND; **no 2.2 µH inductor**; leave `PWR_CR3.REGSEL = 0`
       (LDO is the reset default). The no-buck rule is about the inductor on the board,
       not the silicon.

@@ -359,7 +359,7 @@ The RM3100 is a **discrete chipset, not a single package**:
 | Gyro (optional) | **TDK ICM-42688-P** | 1 | Short attitude transfer + motion gating only |
 | Temp at mag coils | **Pt1000 RTD, non-magnetic package** | 3 | The platinum *element* is non-magnetic; **SMD thin-film RTDs often have Ni-barrier terminations** — specify verified non-magnetic terminations or a leaded element. Compensates **gain** tempco only: the MagI2C has no temperature sensor, and PNI states offset is drift-free |
 | Temp at accel | **SCA3300 internal die sensor** (TMP117 ×0–1 as board reference only) | — | 18.9 LSB/°C → **0.053 °C resolution**, read in the same SPI frame. Its ±10 °C *absolute* offset is irrelevant — compensation uses a per-unit curve against the reported value. Die temperature is the **correct** variable; an external sensor lags and misses package gradients |
-| MCU | **STM32U585 (LQFP64/QFN64)** | 1 | see below |
+| MCU | **STM32U575RGT6** (LQFP-64, non-Q: LDO only, VCAP; LCSC C5270980). **STM32U585RIT6 is pin-identical** (adds crypto accelerators and 1 MB flash) and stays the drop-in upgrade | 1 | see below — the section is written for the U585; everything applies to the U575 except the crypto peripherals |
 | Regulator | **TPS7A2033PDBVR** (300 mA, 7 µVrms, high PSRR; LCSC C2862740, genuine TI only), **EN pin = the FFC `EN` line, high = on**, 100 k pull-down, bench jumper to `+5V` | 1 | **Never a buck** — switching current near a magnetometer is a field source. Replaces Rev A's PMOS gate. Analog rail `+3.3VA` by an **RC split (4.7 Ω + 22 µF), not a ferrite bead** (no magnetic material); the mag AVDD switches stay on `+3V3`. Inputs: `5V_FFC` and USB `VBUS` **Schottky OR-ed** (PMEG2010AEH). One regulator only — the MagI2C's 0.1 V AVDD/DVDD tracking rule forbids separate regulators |
 | Protection | **USB-C ESD array** (TPD4E05U06 class) + **TVS on both 5 V inputs** (SMF5V0A on `5V_FFC` and on `VBUS`) | 1 + 2 | Both at the rear, both silicon — no magnetic concern. Previously missing |
 | Decoupling at coils | **Non-magnetic MLCC** (Cu/Ag termination) | — | Standard MLCCs have ferromagnetic Ni barrier terminations |
@@ -416,6 +416,12 @@ nothing; calibration absorbs the frames.
 experiences. Use it for compensation; an external TMP117 is redundant for this purpose.
 
 ### MCU: STM32U585
+
+> **Fitted part (decided 2026-11-01): STM32U575RGT6**, LCSC C5270980 — the same die family,
+> package and non-Q (LDO-only) pinout, minus the crypto accelerators and with 1 MB flash
+> instead of 2 MB. Chosen because the U585RIT6 is out of stock at LCSC and would need
+> consignment. Everything below applies to the U575 except the cryptographic peripherals;
+> the U585RIT6 remains a zero-change upgrade.
 
 The F401 is functionally adequate but wrong for this instrument.
 
