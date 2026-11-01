@@ -653,11 +653,11 @@ With no prototype, footprint correctness is only proven after fab. Treat accordi
 
 ## Phase 6 — Verification
 
-- [ ] Set real design rules — fix Rev A's `min_clearance: 0.0` and `min_track_width: 0.0`
+- [x] Set real design rules — fix Rev A's `min_clearance: 0.0` and `min_track_width: 0.0`
       to JLCPCB's 6-layer capability (table in
       [Manufacturing at JLCPCB](#manufacturing-at-jlcpcb)). Suggested: clearance 0.15,
       track 0.15, via 0.3/0.5 as Rev A, NPTH ±0.08, hole position ±0.075
-- [ ] **Set `copper_finish` to OSP** in the board stackup. Rev A has `"None"`, which lets
+- [x] **Set `copper_finish` to OSP** in the board stackup. Rev A has `"None"`, which lets
       the fab choose ENIG and its 3–6 µm of ferromagnetic nickel. Select
       **JLC06161H-3313** as the stackup
 - [ ] Verify via `kicad-cli` netlist parsing, **not** the audit tools
