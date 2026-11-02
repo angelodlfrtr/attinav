@@ -160,9 +160,14 @@ verification:
   `KICAD10_SYMBOL_DIR` / `KICAD10_FOOTPRINT_DIR` as Nix store paths, which go stale at
   every rebuild that bumps `kicad-symbols` / `kicad-footprints`. Konnect also does not
   follow KiCad 10's nested `(type "Table")` entry in the user's global lib tables, so
-  it had no fallback. Fixed by re-adding the server with the current paths (plus
-  `KICAD10_TEMPLATE_DIR`); the durable fix is to generate that entry from the Nix
-  package outputs. Symptom when it recurs: every stock `lib_id` fails with "no library
+  it had no fallback. **Durable fix (2026-11-02):** the server now starts through
+  `sh -c 'eval "$(grep -E "^export KICAD10_(SYMBOL|FOOTPRINT|TEMPLATE|3DMODEL)_DIR=" /run/current-system/sw/bin/kicad-cli)"; exec "$0" "$@"' konnect`,
+  reading the current paths from the kicad-cli wrapper at every start. Separately, the
+  user's global `sym-lib-table` / `fp-lib-table` held only KiCad 10's nested
+  `(type "Table")` entry, which eeschema's chooser expands but the **symbol editor showed
+  as an empty list**; they were replaced with the flat stock tables (every library via
+  `${KICAD10_SYMBOL_DIR}` / `${KICAD10_FOOTPRINT_DIR}`, no store paths). A future KiCad
+  release that adds stock libraries needs the template tables copied again. Symptom when it recurs: every stock `lib_id` fails with "no library
   'Device' in the project or global sym-lib-table". Symbols still resolve from the
   embedded cache, so 0-error results on existing sheets remain genuine.
 
