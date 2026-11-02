@@ -620,10 +620,25 @@ placement later.
 
 - [x] **Go hierarchical.** Rev A is one flat sheet with 113 symbols. Root `attinav.kicad_sch`
       (A4) now only holds sheet instances; all circuitry lives in child sheets.
-- [ ] Sheets: **power (done)**, **MCU (done)**, **magnetometer (instantiated 3× — done)**,
-      accel, interface — all three done 2026-11-01. With the MCU sheet in, kicad-cli ERC
-      shows only the labels waiting for the accel and interface sheets (`ACC_*`, `CS_ACC*`,
-      `CS_IMU`, `IMU_INT`, `UART_*`, `QUIET`, `5V_FFC`, `EN`).
+- [x] Sheets: **power**, **MCU**, **magnetometer (instantiated 3×)**, **accel**,
+      **interface** — all done 2026-11-01.
+  - [x] **`accel.kicad_sch`** — 2× SCA3300-D01 on SPI2 (`CS_ACC1`, `CS_ACC2`), each with
+        the four 100 nF of Murata DS Fig. 15 (VDD, A_EXTC, D_EXTC, DVIO), RESERVED/AVSS/
+        DVSS/EMC_GND to GND. **VDD and DVIO both on `+3.3VA`**: Murata requires DVIO never
+        above VDD, and `+3V3` sits ~60 mV above `+3.3VA` (RC drop) — tying DVIO to `+3V3`
+        would violate that permanently. ICM-42688-P on SPI2 (`CS_IMU`, `IMU_INT` on INT1),
+        VDD/VDDIO on `+3V3` with 100 nF + 2.2 µF / 10 nF (TDK DS Table 11), RESV and FSYNC
+        to GND. **Layout rule recorded on the sheet:** ACC2 rotated 90° about Z from ACC1,
+        sight axis on X/Y.
+  - [ ] **Open from the accel sheet:** the `attinav:SCA3300-D01` symbol types MISO (pin 6)
+        as *Output*, so two parts on SPI2 raise ERC "Output connected to Output". The pin is
+        high-Z when CSB is high — change its type to **Tri-state** in the symbol editor,
+        then Update Symbols from Library. Also expected and benign: ICM FSYNC
+        (bidirectional) tied to GND warns against the GND `PWR_FLAG`.
+  - [x] **`interface.kicad_sch`** — 8-pin 1.0 mm FFC, Molex 200528-0080 (Easy-On BackFlip,
+        flip-lock, bottom contact), pinout `GND 5V GND TX RX EN QUIET GND`, hold-downs to
+        GND. 100 Ω series on TX, RX, EN and QUIET; test pads on the connector side of every
+        signal and 5 V. TX/RX are named from this module's side.
   - [x] **`mag.kicad_sch` — RM3100 triad**, instanced as `MAG1..3` on the root. Per instance:
         MagI2C 13156 (`attinav:RM3100_MagI2C`), 2× Sen-XY-f + 1× Sen-Z-f, **6× 121 Ω** in
         series with each DRV pin (IN pins direct to the coil, Z polarity: ZINN ↔ pin `1_POL`),

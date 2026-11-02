@@ -709,7 +709,7 @@
         "uuid": "17390514-7eab-48d7-a075-d99e4047bcae"
       }
     ],
-    "used_designators": "J1,J3,L1-12,#FLG1-3,TH1-6,D2,D5-8,C1-43,U1-9,#PWR1-97,TP6-10,TP14-21,R1-45,JP1-6",
+    "used_designators": "J1,J3-4,L1-12,#FLG1-3,TH1-6,D2,D5-8,C1-43,C45-55,U1-10,U13-14,#PWR1-108,#PWR110,#PWR113-114,#PWR134-146,TP1-4,TP6-10,TP14-21,TP23-28,R1-45,JP1-6",
     "variants": []
   },
   "sheets": [
@@ -736,6 +736,14 @@
     [
       "74ed1a70-7190-47d6-a9c3-a5266bd976cf",
       "MCU"
+    ],
+    [
+      "dc9c791f-d4e3-443f-8058-7fffc995b22d",
+      "ACCEL"
+    ],
+    [
+      "b2711a26-030f-429c-9044-e78e55c23aa7",
+      "INTERFACE"
     ]
   ],
   "text_variables": {},
