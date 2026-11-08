@@ -164,8 +164,8 @@ verification:
   `sh -c 'eval "$(grep -E "^export KICAD10_(SYMBOL|FOOTPRINT|TEMPLATE|3DMODEL)_DIR=" /run/current-system/sw/bin/kicad-cli)"; exec "$0" "$@"' konnect`,
   reading the current paths from the kicad-cli wrapper at every start. Separately, the
   user's global `sym-lib-table` / `fp-lib-table` held only KiCad 10's nested
-  `(type "Table")` entry, which eeschema's chooser expands but the **symbol editor showed
-  as an empty list**; they were replaced with the flat stock tables (every library via
+  `(type "Table")` entry, which KiCad resolves but Konnect does not follow; they
+  were replaced with the flat stock tables (every library via
   `${KICAD10_SYMBOL_DIR}` / `${KICAD10_FOOTPRINT_DIR}`, no store paths). A future KiCad
   release that adds stock libraries needs the template tables copied again. Symptom when it recurs: every stock `lib_id` fails with "no library
   'Device' in the project or global sym-lib-table". Symbols still resolve from the

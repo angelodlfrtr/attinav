@@ -1,0 +1,23 @@
+(version 1)
+
+# Fine-pitch pad-to-pad clearance inside one footprint.
+# The Default netclass clearance (0.2 mm) governs routing; these packages have a
+# 0.15 mm gap between adjacent pads by design, which JLCPCB's 6-layer process
+# accepts (0.09 mm min). Scope is each footprint's own pads only.
+# PNI MagI2C MLF-28, 0.4 mm pitch (U2, U4, U6) and TDK ICM-42688-P LGA-14 (U10).
+
+(rule "fine_pitch_pad_to_pad_U2"
+    (condition "A.Type == 'Pad' && B.Type == 'Pad' && A.memberOfFootprint('U2') && B.memberOfFootprint('U2')")
+    (constraint clearance (min 0.15mm)))
+
+(rule "fine_pitch_pad_to_pad_U4"
+    (condition "A.Type == 'Pad' && B.Type == 'Pad' && A.memberOfFootprint('U4') && B.memberOfFootprint('U4')")
+    (constraint clearance (min 0.15mm)))
+
+(rule "fine_pitch_pad_to_pad_U6"
+    (condition "A.Type == 'Pad' && B.Type == 'Pad' && A.memberOfFootprint('U6') && B.memberOfFootprint('U6')")
+    (constraint clearance (min 0.15mm)))
+
+(rule "fine_pitch_pad_to_pad_U10"
+    (condition "A.Type == 'Pad' && B.Type == 'Pad' && A.memberOfFootprint('U10') && B.memberOfFootprint('U10')")
+    (constraint clearance (min 0.15mm)))
