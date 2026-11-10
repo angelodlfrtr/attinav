@@ -17,7 +17,7 @@ use crate::calibration::{ACC_COUNT, CALIBRATION_MAX_BYTES, Calibration, MAG_COUN
 use crate::crc::crc16_ccitt_false;
 use crate::math::Vec3;
 use crate::quality::{QualityFlags, Thresholds};
-use crate::solver::{CalShot, SolveError, SolveReport};
+use crate::solver::{CalShot, SHOT_CAPACITY, SolveError, SolveReport};
 use crate::wire::{Reader, WireError, Writer};
 
 /// Largest payload of any message (a full [`Calibration`]).
@@ -1558,7 +1558,22 @@ impl DeviceMessage {
                 }
                 w.u16(s.report.shots)?;
                 w.f32(s.dip_deg)?;
-                w.f32(s.field_ut)
+                w.f32(s.field_ut)?;
+                // Per-shot residuals for every slot that holds a shot. Excluded shots keep their
+                // (large) deviation, so the highest non-zero slot bounds the used range.
+                w.u64(s.report.excluded_mask)?;
+                let n = s
+                    .report
+                    .shot_residual_deg
+                    .iter()
+                    .rposition(|v| *v != 0.0)
+                    .map_or(0, |i| i + 1)
+                    .max(usize::from(s.report.shots).min(SHOT_CAPACITY));
+                w.u8(n as u8)?;
+                for v in &s.report.shot_residual_deg[..n] {
+                    w.f32(*v)?;
+                }
+                Ok(())
             }
             Self::CalData(c) => c.write(w),
             Self::CalInfo(i) => {
@@ -1703,6 +1718,17 @@ impl DeviceMessage {
                     *v = f64::from(r.f32()?);
                 }
                 let shots = r.u16()?;
+                let dip_deg = r.f32()?;
+                let field_ut = r.f32()?;
+                let excluded_mask = r.u64()?;
+                let n = usize::from(r.u8()?);
+                if n > SHOT_CAPACITY {
+                    return Err(WireError::Invalid);
+                }
+                let mut shot_residual_deg = [0.0f32; SHOT_CAPACITY];
+                for v in &mut shot_residual_deg[..n] {
+                    *v = r.f32()?;
+                }
                 Self::CalSolved(CalSolved {
                     error,
                     report: SolveReport {
@@ -1712,9 +1738,11 @@ impl DeviceMessage {
                         mag_residual_deg,
                         acc_residual_deg,
                         shots,
+                        excluded_mask,
+                        shot_residual_deg,
                     },
-                    dip_deg: r.f32()?,
-                    field_ut: r.f32()?,
+                    dip_deg,
+                    field_ut,
                 })
             }
             CAL_DATA => Self::CalData(Calibration::read(&mut r)?),
@@ -2015,7 +2043,15 @@ mod tests {
                     residual_deg: 0.0625,
                     mag_residual_deg: [0.0625, 0.125, 0.25],
                     acc_residual_deg: [0.0625, 0.5],
-                    shots: 56,
+                    shots: 55,
+                    excluded_mask: 1 << 7,
+                    shot_residual_deg: {
+                        let mut v = [0.0f32; SHOT_CAPACITY];
+                        for (i, x) in v[..56].iter_mut().enumerate() {
+                            *x = 0.01 * i as f32 + 0.005;
+                        }
+                        v
+                    },
                 },
                 dip_deg: 63.5,
                 field_ut: 48.2,

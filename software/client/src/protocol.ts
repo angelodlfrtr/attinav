@@ -218,7 +218,12 @@ export interface SolveReport {
   residual_deg: number;
   mag_residual_deg: number[];
   acc_residual_deg: number[];
+  /** Shots used after outlier rejection. */
   shots: number;
+  /** Buffer indices of the shots rejected as outliers. */
+  excluded: number[];
+  /** Per buffer index: deviation of the shot's laser direction from its group mean, degrees. */
+  shot_residual_deg: number[];
 }
 
 export interface CalSolved {

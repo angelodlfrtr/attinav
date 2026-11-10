@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { ack, api, expect, shotTimeout, toError } from "../../api";
-import { CAL_GROUPS, CAL_ROLLS, isSevere, type Calibration as CalibrationData, type CalShotReport } from "../../protocol";
+import { CAL_GROUPS, CAL_ROLLS, isSevere, type Calibration as CalibrationData, type CalShotReport, type SolveReport } from "../../protocol";
 import { useAppDispatch, useAppSelector } from "../../store";
 import {
   busyMessage,
@@ -177,7 +177,16 @@ export function Calibration() {
               </div>
             ))}
             {cal.slots.map((row, g) => (
-              <SlotRow key={g} group={g} row={row} disabled={!connected || !cal.sessionOpen || busy} onTake={takeSlot} onRemove={removeSlot} onHover={setHover} />
+              <SlotRow
+                key={g}
+                group={g}
+                row={row}
+                disabled={!connected || !cal.sessionOpen || busy}
+                residuals={cal.solved && !cal.solvedStale && !cal.solved.error ? cal.solved.report : null}
+                onTake={takeSlot}
+                onRemove={removeSlot}
+                onHover={setHover}
+              />
             ))}
           </div>
           <div className="mt-3 flex items-center gap-4 text-sm">
@@ -214,7 +223,16 @@ export function Calibration() {
               ) : (
                 <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
                   <Stat label="RMS residual" value={deg(cal.solved.report.residual_deg, 3)} tone={cal.solved.report.residual_deg > 0.2 ? "warn" : "ok"} />
-                  <Stat label="Iterations" value={cal.solved.report.iterations} sub={`${cal.solved.report.shots} shots`} />
+                  <Stat
+                    label="Shots used"
+                    value={cal.solved.report.shots}
+                    tone={cal.solved.report.excluded.length > 0 ? "warn" : undefined}
+                    sub={
+                      cal.solved.report.excluded.length > 0
+                        ? `${cal.solved.report.excluded.length} rejected as outlier(s): retake the red cells`
+                        : `${cal.solved.report.iterations} iterations`
+                    }
+                  />
                   <Stat label="Fitted dip" value={deg(cal.solved.dip_deg, 2)} />
                   <Stat label="Fitted |B|" value={num(cal.solved.field_ut, 2)} unit="µT" />
                   <div className="col-span-2 md:col-span-4">
@@ -359,6 +377,7 @@ function SlotRow({
   group,
   row,
   disabled,
+  residuals,
   onTake,
   onRemove,
   onHover,
@@ -366,6 +385,8 @@ function SlotRow({
   group: number;
   row: { status: string; report?: CalShotReport }[];
   disabled: boolean;
+  /** Per-shot residuals of the last solve, when they still describe this buffer. */
+  residuals: SolveReport | null;
   onTake: (g: number, r: number) => Promise<void>;
   onRemove: (g: number, r: number) => Promise<void>;
   onHover: (r: CalShotReport | null) => void;
@@ -376,11 +397,13 @@ function SlotRow({
       {row.map((slot, r) => {
         const report = slot.status === "done" ? slot.report : undefined;
         const severe = report ? isSevere(report.flags) : false;
+        const excluded = report !== undefined && (residuals?.excluded.includes(report.index) ?? false);
+        const residual = report && residuals ? residuals.shot_residual_deg[report.index] : undefined;
         const cls =
           slot.status === "taking"
             ? "border-accent bg-accent/10"
             : report
-              ? severe
+              ? excluded || severe
                 ? "border-bad/60 bg-bad/10"
                 : report.flags !== 0
                   ? "border-warn/60 bg-warn/10"
@@ -389,7 +412,7 @@ function SlotRow({
         return (
           <button
             key={r}
-            className={`flex h-9 items-center justify-center rounded border text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${cls}`}
+            className={`flex h-9 flex-col items-center justify-center rounded border text-xs leading-tight transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${cls}`}
             disabled={disabled || slot.status === "taking"}
             onClick={() => void onTake(group, r)}
             onContextMenu={(e) => {
@@ -398,9 +421,18 @@ function SlotRow({
             }}
             onMouseEnter={() => onHover(report ?? null)}
             onMouseLeave={() => onHover(null)}
-            title={report ? "click: retake · right-click: remove" : "click: take"}
+            title={report ? (excluded ? "rejected by the solver as an outlier: retake" : "click: retake · right-click: remove") : "click: take"}
           >
-            {slot.status === "taking" ? <Spinner /> : report ? <span className="num">{report.index + 1}</span> : "·"}
+            {slot.status === "taking" ? (
+              <Spinner />
+            ) : report ? (
+              <>
+                <span className={`num ${excluded ? "line-through" : ""}`}>{report.index + 1}</span>
+                {residual !== undefined && <span className="num text-[10px] text-ink-3">{residual.toFixed(3)}°</span>}
+              </>
+            ) : (
+              "·"
+            )}
           </button>
         );
       })}

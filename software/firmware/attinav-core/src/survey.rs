@@ -4,8 +4,10 @@
 //!
 //! * **Body frame** — right-handed, `X` forward along the laser axis, `Y` to the right, `Z` down.
 //!   Both accelerometers and the three magnetometer triads are brought into this frame by their
-//!   calibration; the body frame *is* the accelerometer-1 frame (its calibration matrix is upper
-//!   triangular, see [`crate::solver`]), so the laser–accelerometer alignment is mechanical.
+//!   calibration. The laser axis is found by the calibration itself (it is the axis the instrument
+//!   rolls about between the shots of a group, see [`crate::solver`]), so sensor-to-laser tilts
+//!   are calibrated, not assumed; only roll zero is a convention (accelerometer-1 raw `Y` lies in
+//!   the body `XY` plane).
 //! * **World frame** — NED: `N` magnetic north, `E` east, `D` down.
 //! * `g` is the **direction of gravity** in the body frame (points down). An accelerometer at rest
 //!   measures the reaction force, which points up: `g = -a / |a|`.

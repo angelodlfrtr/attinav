@@ -95,9 +95,11 @@ Unsolicited frames are dropped on a link whose outbound queue is full; replies w
 ## Calibration
 
 Heeb / DistoX procedure: 14 directions × 4 roll angles, no reference direction needed. The solver
-(`attinav_core::solver`) fits accelerometer 1 (offset + upper-triangular matrix: it defines the
-body frame) jointly with triad 1 (offset + full matrix + dip), then each remaining sensor against
-that pair. Up to four temperature sets are stored; shots interpolate between the two sets
+(`attinav_core::solver`) fits accelerometer 1 and triad 1 jointly (offsets, full matrices, dip;
+the roll axis of each group defines the laser axis, so sensor-to-laser tilts are calibrated),
+rejects outlier shots, then fits each remaining sensor against that pair. Synthetic instruments
+calibrate to the sensor noise floor (≈ 0.03° azimuth, 0.006° inclination RMS; see
+`attinav-core/examples/montecarlo.rs`). Up to four temperature sets are stored; shots interpolate between the two sets
 bracketing the sensor's current temperature. The whole calibration plus the configuration lives in
 two alternating flash slots with a CRC-32 and a sequence number, so a reset during a write never
 loses the previous record.

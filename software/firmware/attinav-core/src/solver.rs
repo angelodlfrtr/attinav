@@ -13,19 +13,44 @@
 //!
 //! # Parameterisation
 //!
-//! The pair (accelerometer 1, triad 1) is solved first, jointly: 9 accelerometer parameters
-//! (offset + **upper-triangular** gain matrix, which pins the body frame to the accelerometer axes
-//! and removes the rotational gauge freedom), 12 magnetometer parameters (offset + full matrix,
-//! including the rotation into the body frame) and the dip, 22 in total.
+//! The pair (accelerometer 1, triad 1) is solved first, jointly: 11 accelerometer parameters
+//! (offset + full gain matrix minus one element), 12 magnetometer parameters (offset + full
+//! matrix) and the dip, 24 in total. Constraint 4 is what defines the body frame: the laser axis
+//! is the axis the instrument rolls about, so the fit rotates both sensor frames until body `X`
+//! is that axis — the mechanical tilt between the accelerometer package and the laser, and the
+//! rotation between magnetometer and accelerometer, are both calibrated. Only the rotation
+//! *about* the laser axis is left undetermined by the data; it is fixed by forcing the
+//! accelerometer's raw `Y` axis into the body `XY` plane (`acc[0].matrix.m[2][1] = 0`), so roll
+//! zero stays close to the mechanical frame.
+//!
 //! Then every other sensor is solved alone against that pair, with its laser direction constrained
 //! shot-by-shot to the pair's — the other triads and the second accelerometer are thereby brought
 //! into the same body frame.
+//!
+//! The pair problem is mirror-symmetric (a reflected magnetometer frame satisfies every residual
+//! with east and west swapped); the start point is therefore searched over proper rotations only,
+//! and a converged pair with a negative determinant is rejected.
+//!
+//! # Outliers
+//!
+//! After the pair converges, every shot's deviation from its group's mean laser direction and its
+//! field-norm deviation are compared with their RMS; shots beyond [`SolveOptions::outlier_sigma`]
+//! times the RMS (and an absolute floor) are dropped and the pair is re-solved, at most twice.
+//! The per-shot deviations and the exclusion mask are part of the [`SolveReport`] so a host can
+//! show which shot was bad and retake it.
 //!
 //! # Numerics
 //!
 //! Levenberg–Marquardt in `f64` with central finite-difference Jacobians, accumulating `JᵀJ` and
 //! `Jᵀr` group by group so no Jacobian is ever stored. Raw counts are normalised by their mean norm
-//! before the fit so every parameter is O(1).
+//! before the fit so every parameter is O(1). Convergence requires a negligible relative cost
+//! decrease on a lightly damped (Gauss–Newton-like) step, so a tiny heavily damped step is never
+//! mistaken for the minimum.
+//!
+//! Measured on synthetic instruments (see `examples/montecarlo.rs`): with averaged-shot noise of
+//! 3 counts on the triads and 0.5 counts on the accelerometers, the calibrated azimuth error is
+//! about 0.03° RMS and the inclination error 0.006° RMS, which is the sensor noise itself; a
+//! noiseless calibration is recovered exactly, and a single disturbed shot is rejected.
 //!
 //! # Cooperative execution
 //!
@@ -35,7 +60,7 @@
 //! for host-side use and tests.
 
 use crate::calibration::{ACC_COUNT, Affine, MAG_COUNT, SensorSet, rm3100_nominal_gain};
-use crate::math::{Mat3, Vec3, rad_to_deg};
+use crate::math::{Mat3, Vec3, deg_to_rad, rad_to_deg};
 use crate::survey::laser_direction_world;
 
 /// Number of pointing directions in the procedure.
@@ -208,6 +233,13 @@ pub struct SolveOptions {
     pub max_residual_deg: f64,
     /// RM3100 cycle count the shots were taken at (for the µT estimate).
     pub mag_cycle_count: u16,
+    /// Outlier rejection: after the pair converges, a shot whose laser-direction deviation from
+    /// its group exceeds this many times the RMS deviation (and [`Self::outlier_floor_deg`]) is
+    /// dropped and the pair is re-solved, at most twice. `0` disables rejection.
+    pub outlier_sigma: f64,
+    /// Absolute floor (degrees) under which no shot is ever called an outlier, so a quiet
+    /// calibration is not thinned on noise alone.
+    pub outlier_floor_deg: f64,
 }
 
 impl Default for SolveOptions {
@@ -217,12 +249,14 @@ impl Default for SolveOptions {
             relative_tolerance: 1e-12,
             max_residual_deg: 0.5,
             mag_cycle_count: 400,
+            outlier_sigma: 4.0,
+            outlier_floor_deg: 0.05,
         }
     }
 }
 
 /// Diagnostics of a completed solve.
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct SolveReport {
@@ -236,8 +270,112 @@ pub struct SolveReport {
     pub mag_residual_deg: [f64; MAG_COUNT],
     /// Same, per accelerometer (`[0]` is the primary).
     pub acc_residual_deg: [f64; ACC_COUNT],
-    /// Shots used.
+    /// Shots used (after outlier rejection).
     pub shots: u16,
+    /// Bit `i` set when shot `i` (index in the solved slice) was rejected as an outlier.
+    /// Serialised (serde) as the list of set indices, `excluded`, so JSON consumers never meet a
+    /// 64-bit integer.
+    #[cfg_attr(feature = "serde", serde(rename = "excluded", with = "serde_mask"))]
+    pub excluded_mask: u64,
+    /// Per shot (index in the solved slice): angle between its laser direction and its group's
+    /// mean, degrees, from the pair fit that decided its fate. Zero for shots alone in their
+    /// group and for unused slots.
+    #[cfg_attr(feature = "serde", serde(with = "serde_f32_array"))]
+    pub shot_residual_deg: [f32; SHOT_CAPACITY],
+}
+
+impl Default for SolveReport {
+    fn default() -> Self {
+        Self {
+            iterations: 0,
+            cost: 0.0,
+            residual_deg: 0.0,
+            mag_residual_deg: [0.0; MAG_COUNT],
+            acc_residual_deg: [0.0; ACC_COUNT],
+            shots: 0,
+            excluded_mask: 0,
+            shot_residual_deg: [0.0; SHOT_CAPACITY],
+        }
+    }
+}
+
+#[cfg(feature = "serde")]
+mod serde_mask {
+    //! A `u64` bit mask as the sequence of its set bit indices.
+    use serde::de::{SeqAccess, Visitor};
+    use serde::ser::SerializeSeq;
+    use serde::{Deserializer, Serializer};
+
+    pub fn serialize<S: Serializer>(v: &u64, s: S) -> Result<S::Ok, S::Error> {
+        let mut seq = s.serialize_seq(Some(v.count_ones() as usize))?;
+        for i in 0..64u8 {
+            if v & (1u64 << i) != 0 {
+                seq.serialize_element(&i)?;
+            }
+        }
+        seq.end()
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<u64, D::Error> {
+        struct V;
+        impl<'de> Visitor<'de> for V {
+            type Value = u64;
+            fn expecting(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+                f.write_str("a sequence of bit indices below 64")
+            }
+            fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> Result<u64, A::Error> {
+                let mut mask = 0u64;
+                while let Some(i) = seq.next_element::<u8>()? {
+                    if i >= 64 {
+                        return Err(serde::de::Error::custom("bit index out of range"));
+                    }
+                    mask |= 1u64 << i;
+                }
+                Ok(mask)
+            }
+        }
+        d.deserialize_seq(V)
+    }
+}
+
+#[cfg(feature = "serde")]
+mod serde_f32_array {
+    //! serde derives arrays only up to 32 elements; the per-shot residuals go through a sequence.
+    use super::SHOT_CAPACITY;
+    use serde::de::{SeqAccess, Visitor};
+    use serde::ser::SerializeSeq;
+    use serde::{Deserializer, Serializer};
+
+    pub fn serialize<S: Serializer>(v: &[f32; SHOT_CAPACITY], s: S) -> Result<S::Ok, S::Error> {
+        let mut seq = s.serialize_seq(Some(SHOT_CAPACITY))?;
+        for x in v {
+            seq.serialize_element(x)?;
+        }
+        seq.end()
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<[f32; SHOT_CAPACITY], D::Error> {
+        struct V;
+        impl<'de> Visitor<'de> for V {
+            type Value = [f32; SHOT_CAPACITY];
+            fn expecting(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+                write!(f, "a sequence of at most {SHOT_CAPACITY} numbers")
+            }
+            fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> Result<Self::Value, A::Error> {
+                let mut out = [0.0f32; SHOT_CAPACITY];
+                let mut i = 0;
+                while let Some(x) = seq.next_element::<f32>()? {
+                    if i >= SHOT_CAPACITY {
+                        return Err(serde::de::Error::invalid_length(i + 1, &self));
+                    }
+                    out[i] = x;
+                    i += 1;
+                }
+                Ok(out)
+            }
+        }
+        d.deserialize_seq(V)
+    }
 }
 
 /// Which sub-problem a [`SolveJob`] is working on.
@@ -298,6 +436,10 @@ pub struct SolveJob<'a> {
     ref_g: [Vec3; SHOT_CAPACITY],
     ref_m: [Vec3; SHOT_CAPACITY],
     gm_dot: f64,
+    /// Shots rejected as outliers (index in `shots`).
+    excluded: [bool; SHOT_CAPACITY],
+    /// Pair-phase rounds completed (the first solve plus one per rejection pass).
+    rounds: u8,
     set: SensorSet,
     report: SolveReport,
 }
@@ -305,7 +447,8 @@ pub struct SolveJob<'a> {
 impl<'a> SolveJob<'a> {
     /// Validates the shots and prepares the first phase.
     pub fn new(shots: &'a [CalShot], opts: SolveOptions) -> Result<Self, SolveError> {
-        let layout = GroupLayout::build(shots)?;
+        let excluded = [false; SHOT_CAPACITY];
+        let layout = GroupLayout::build(shots, &excluded)?;
         for s in shots {
             let finite = s
                 .mag
@@ -340,6 +483,8 @@ impl<'a> SolveJob<'a> {
             ref_g: [Vec3::ZERO; SHOT_CAPACITY],
             ref_m: [Vec3::ZERO; SHOT_CAPACITY],
             gm_dot: 0.0,
+            excluded,
+            rounds: 0,
             set: SensorSet::nominal(opts.mag_cycle_count),
             report: SolveReport {
                 shots: shots.len() as u16,
@@ -374,7 +519,11 @@ impl<'a> SolveJob<'a> {
                     },
                     LmStep::Failed(e) => self.finish(Err(e)),
                     LmStep::Converged => match self.finish_pair() {
-                        Ok(()) => self.start_single(Source::Mag(1)),
+                        Ok(true) => Progress::Running {
+                            phase: self.phase,
+                            iteration: self.lm_pair.iterations,
+                        },
+                        Ok(false) => self.start_single(Source::Mag(1)),
                         Err(e) => self.finish(Err(e)),
                     },
                 }
@@ -392,6 +541,7 @@ impl<'a> SolveJob<'a> {
                     &self.ref_g,
                     &self.ref_m,
                     &self.ref_dir,
+                    &self.excluded,
                     self.gm_dot,
                 );
                 match self.lm_single.step(&prob, &self.opts) {
@@ -444,6 +594,7 @@ impl<'a> SolveJob<'a> {
             &self.ref_g,
             &self.ref_m,
             &self.ref_dir,
+            &self.excluded,
             self.gm_dot,
         );
         let mut p = [0.0; SINGLE_NP];
@@ -458,12 +609,19 @@ impl<'a> SolveJob<'a> {
     }
 
     /// Converts the converged pair solution into reference vectors for the other sensors.
-    fn finish_pair(&mut self) -> Result<(), SolveError> {
+    /// Returns `Ok(true)` when outliers were dropped and the pair phase restarted.
+    fn finish_pair(&mut self) -> Result<bool, SolveError> {
         let (acc0, mag0, _) = unpack_pair(&self.lm_pair.p);
         let acc0 = unscale(acc0, self.acc_scale[0]);
         let mag0 = unscale(mag0, self.mag_scale[0]);
+        // Both sensors are right-handed triads; a negative determinant means the fit settled in
+        // the mirrored solution (east and west swapped), which no residual can detect.
+        if acc0.matrix.det() <= 0.0 || mag0.matrix.det() <= 0.0 {
+            return Err(SolveError::Singular);
+        }
         let n = self.shots.len();
         let mut dot_sum = 0.0;
+        let mut used = 0usize;
         for (i, s) in self.shots.iter().enumerate() {
             let a = acc0.apply(s.acc[0]);
             let m = mag0.apply(s.mag[0]);
@@ -471,18 +629,74 @@ impl<'a> SolveJob<'a> {
             self.ref_g[i] = g.normalized().ok_or(SolveError::Singular)?;
             self.ref_m[i] = m.normalized().ok_or(SolveError::Singular)?;
             self.ref_dir[i] = laser_direction_world(g, m).ok_or(SolveError::Singular)?;
-            dot_sum += self.ref_g[i].dot(self.ref_m[i]);
+            if !self.excluded[i] {
+                dot_sum += self.ref_g[i].dot(self.ref_m[i]);
+                used += 1;
+            }
         }
-        self.gm_dot = dot_sum / n as f64;
+        self.gm_dot = dot_sum / used.max(1) as f64;
+
+        // Per-shot deviation from the group's mean direction; these are what the host sees.
+        let mut dev = [0.0f64; SHOT_CAPACITY];
+        per_shot_deviation(&self.ref_dir[..n], &self.layout, &mut dev);
+        for i in 0..n {
+            self.report.shot_residual_deg[i] = rad_to_deg(dev[i]) as f32;
+        }
         let residual_deg = group_scatter_deg(&self.ref_dir[..n], &self.layout);
-        if !residual_deg.is_finite() || residual_deg > self.opts.max_residual_deg {
+        if !residual_deg.is_finite() {
+            return Err(SolveError::ResidualTooLarge);
+        }
+
+        // Outlier rejection: a shot far outside its group in direction (a moved instrument, a
+        // field disturbance across the laser axis) or in field magnitude (a disturbance along the
+        // field, which barely moves the direction) is dropped and the pair re-solved from the
+        // current parameters.
+        self.rounds += 1;
+        if self.opts.outlier_sigma > 0.0 && self.rounds <= 2 {
+            let mut norm_dev = [0.0f64; SHOT_CAPACITY];
+            let mut norm_sq = 0.0;
+            for (i, s) in self.shots.iter().enumerate() {
+                norm_dev[i] = libm::fabs(mag0.apply(s.mag[0]).norm() - 1.0);
+                if !self.excluded[i] {
+                    norm_sq += norm_dev[i] * norm_dev[i];
+                }
+            }
+            let norm_rms = libm::sqrt(norm_sq / used.max(1) as f64);
+            let dir_limit = deg_to_rad((self.opts.outlier_sigma * residual_deg).max(self.opts.outlier_floor_deg));
+            let norm_limit = (self.opts.outlier_sigma * norm_rms).max(OUTLIER_NORM_FLOOR);
+            let mut candidate = self.excluded;
+            let mut dropped = 0;
+            for i in 0..n {
+                if !candidate[i] && (dev[i] > dir_limit || norm_dev[i] > norm_limit) {
+                    candidate[i] = true;
+                    dropped += 1;
+                }
+            }
+            if dropped > 0
+                && let Ok(layout) = GroupLayout::build(self.shots, &candidate)
+            {
+                self.excluded = candidate;
+                self.layout = layout;
+                let pair = pair_problem(self.shots, &self.layout, self.acc_scale[0], self.mag_scale[0]);
+                let p = self.lm_pair.p;
+                let mut lm = Lm::new(p);
+                lm.start(&pair);
+                lm.iterations = self.lm_pair.iterations;
+                self.lm_pair = lm;
+                return Ok(true);
+            }
+        }
+
+        if residual_deg > self.opts.max_residual_deg {
             return Err(SolveError::ResidualTooLarge);
         }
         // Field magnitude from the offset-corrected raw norm (the plain mean norm would be biased
         // upward by the hard-iron offset) and the nominal gain at the shot cycle count.
         let mut raw_norm = 0.0;
-        for s in self.shots {
-            raw_norm += (s.mag[0] - mag0.offset).norm() / n as f64;
+        for (i, s) in self.shots.iter().enumerate() {
+            if !self.excluded[i] {
+                raw_norm += (s.mag[0] - mag0.offset).norm() / used as f64;
+            }
         }
         self.set.field_ut = raw_norm / rm3100_nominal_gain(self.opts.mag_cycle_count);
         self.set.acc[0] = acc0;
@@ -492,7 +706,9 @@ impl<'a> SolveJob<'a> {
         self.report.residual_deg = residual_deg;
         self.report.mag_residual_deg[0] = residual_deg;
         self.report.acc_residual_deg[0] = residual_deg;
-        Ok(())
+        self.report.excluded_mask = (0..n).filter(|&i| self.excluded[i]).fold(0u64, |m, i| m | (1u64 << i));
+        self.report.shots = used as u16;
+        Ok(false)
     }
 
     /// Dip, residual summary and the set's temperature tags (`field_ut` is set by `finish_pair`).
@@ -503,18 +719,23 @@ impl<'a> SolveJob<'a> {
     fn finalize_metadata(&mut self) {
         self.set.dip_deg = rad_to_deg(libm::asin(self.gm_dot.clamp(-1.0, 1.0)));
         self.set.residual_deg = self.report.residual_deg as f32;
-        self.set.shots = self.shots.len() as u16;
+        self.set.shots = self.report.shots;
+        let used = self.shots.iter().zip(self.excluded).filter(|(_, x)| !x).map(|(s, _)| s);
         for k in 0..MAG_COUNT {
-            self.set.mag_temp_c[k] = finite_mean(self.shots.iter().map(|s| s.mag_temp_c[k]));
+            self.set.mag_temp_c[k] = finite_mean(used.clone().map(|s| s.mag_temp_c[k]));
         }
         for k in 0..ACC_COUNT {
-            self.set.acc_temp_c[k] = finite_mean(self.shots.iter().map(|s| s.acc_temp_c[k]));
+            self.set.acc_temp_c[k] = finite_mean(used.clone().map(|s| s.acc_temp_c[k]));
         }
     }
 }
 
 /// Temperature tag used when no shot of a set carried a finite reading for a sensor.
 pub const FALLBACK_TEMP_C: f32 = 20.0;
+
+/// Relative field-norm deviation under which a shot is never called an outlier (0.3 %: an
+/// order of magnitude above the averaged magnetometer noise).
+const OUTLIER_NORM_FLOOR: f64 = 0.003;
 
 /// Mean of the finite values, or [`FALLBACK_TEMP_C`] when there is none.
 fn finite_mean(values: impl Iterator<Item = f32>) -> f32 {
@@ -550,6 +771,7 @@ fn single_problem<'a, 'j>(
     ref_g: &'j [Vec3; SHOT_CAPACITY],
     ref_m: &'j [Vec3; SHOT_CAPACITY],
     ref_dir: &'j [Vec3; SHOT_CAPACITY],
+    excluded: &'j [bool; SHOT_CAPACITY],
     gm_dot: f64,
 ) -> SingleProblem<'a, 'j> {
     let n = shots.len();
@@ -563,6 +785,7 @@ fn single_problem<'a, 'j>(
         scale,
         partner,
         ref_dir: &ref_dir[..n],
+        excluded: &excluded[..n],
         gm_dot,
     }
 }
@@ -609,8 +832,14 @@ struct GroupLayout {
 }
 
 impl GroupLayout {
-    fn build(shots: &[CalShot]) -> Result<Self, SolveError> {
-        if shots.len() < MIN_SHOTS || shots.len() > SHOT_CAPACITY {
+    /// Groups the shots that are not `excluded`; the usual minimum-coverage rules apply to what
+    /// remains.
+    fn build(shots: &[CalShot], excluded: &[bool; SHOT_CAPACITY]) -> Result<Self, SolveError> {
+        if shots.len() > SHOT_CAPACITY {
+            return Err(SolveError::NotEnoughShots);
+        }
+        let used = shots.iter().zip(excluded).filter(|(_, x)| !**x).count();
+        if used < MIN_SHOTS {
             return Err(SolveError::NotEnoughShots);
         }
         let mut layout = Self {
@@ -620,6 +849,9 @@ impl GroupLayout {
         };
         let mut group_ids = [0u8; SHOT_CAPACITY];
         for (i, s) in shots.iter().enumerate() {
+            if excluded[i] {
+                continue;
+            }
             let gi = group_ids[..layout.n_groups]
                 .iter()
                 .position(|&g| g == s.group)
@@ -643,6 +875,26 @@ impl GroupLayout {
 
     fn group(&self, gi: usize) -> &[usize] {
         &self.members[gi][..self.counts[gi]]
+    }
+}
+
+/// Angle (radians) between each shot's laser direction and its group's mean direction, written
+/// to `out[i]`; zero for shots alone in their group or not in the layout.
+fn per_shot_deviation(dirs: &[Vec3], layout: &GroupLayout, out: &mut [f64; SHOT_CAPACITY]) {
+    *out = [0.0; SHOT_CAPACITY];
+    for gi in 0..layout.n_groups {
+        let idx = layout.group(gi);
+        if idx.len() < 2 {
+            continue;
+        }
+        let mut mean = Vec3::ZERO;
+        for &i in idx {
+            mean = mean + dirs[i];
+        }
+        let Some(mean) = mean.normalized() else { continue };
+        for &i in idx {
+            out[i] = dirs[i].angle_to(mean);
+        }
     }
 }
 
@@ -678,6 +930,9 @@ fn single_scatter_deg(prob: &SingleProblem<'_, '_>, model: &Affine) -> f64 {
     let mut sum_sq = 0.0;
     let mut n = 0usize;
     for (i, s) in prob.shots.iter().enumerate() {
+        if prob.excluded[i] {
+            continue;
+        }
         let v = model.apply(prob.raw(s));
         let dir = match prob.source {
             Source::Mag(_) => laser_direction_world(prob.partner[i], v),
@@ -711,11 +966,18 @@ trait Problem<const NP: usize> {
     fn residuals(&self, b: usize, p: &[f64; NP], out: &mut [f64; MAX_BLOCK_RESIDUALS]) -> usize;
 }
 
-/// Offset (3) + upper-triangular matrix (6) → [`Affine`] on normalised counts.
-const fn unpack_upper(p: &[f64]) -> Affine {
+/// Parameters of the primary accelerometer: offset (3) + full matrix minus one gauge element (8).
+const ACC_NP: usize = 11;
+
+/// Offset (3) + matrix with `m[2][1] = 0` (8) → [`Affine`] on normalised counts.
+///
+/// The roll-invariance residuals pin the direction of body `X` (the laser axis) but leave the
+/// rotation *about* it free; zeroing `m[2][1]` removes that one degree of freedom by putting the
+/// accelerometer's raw `Y` axis in the body `XY` plane (roll zero ≈ the mechanical frame).
+const fn unpack_acc(p: &[f64]) -> Affine {
     Affine {
         offset: Vec3::new(p[0], p[1], p[2]),
-        matrix: Mat3::from_rows([p[3], p[4], p[5]], [0.0, p[6], p[7]], [0.0, 0.0, p[8]]),
+        matrix: Mat3::from_rows([p[3], p[4], p[5]], [p[6], p[7], p[8]], [p[9], 0.0, p[10]]),
     }
 }
 
@@ -727,10 +989,14 @@ const fn unpack_full(p: &[f64]) -> Affine {
     }
 }
 
-const PAIR_NP: usize = 9 + 12 + 1;
+const PAIR_NP: usize = ACC_NP + 12 + 1;
 
 fn unpack_pair(p: &[f64; PAIR_NP]) -> (Affine, Affine, f64) {
-    (unpack_upper(&p[0..9]), unpack_full(&p[9..21]), p[21])
+    (
+        unpack_acc(&p[0..ACC_NP]),
+        unpack_full(&p[ACC_NP..ACC_NP + 12]),
+        p[PAIR_NP - 1],
+    )
 }
 
 /// Joint accelerometer-0 / triad-0 problem.
@@ -750,10 +1016,11 @@ impl PairProblem<'_, '_> {
         let mut best = (f64::INFINITY, [0.0; PAIR_NP]);
         for perm in AXIS_MAPS {
             let mut q = [0.0; PAIR_NP];
+            // Accelerometer at the identity (its package tilt is a few degrees at most).
             q[3] = 1.0;
-            q[6] = 1.0;
-            q[8] = 1.0;
-            q[12..21].copy_from_slice(&perm);
+            q[7] = 1.0;
+            q[10] = 1.0;
+            q[ACC_NP + 3..ACC_NP + 12].copy_from_slice(&perm);
             let rot = Mat3::from_flat(perm);
             let mut dot = 0.0;
             for s in self.shots {
@@ -761,7 +1028,7 @@ impl PairProblem<'_, '_> {
                     dot += g.dot(m);
                 }
             }
-            q[21] = dot / self.shots.len() as f64;
+            q[PAIR_NP - 1] = dot / self.shots.len() as f64;
             let c = cost(self, &q);
             if c < best.0 {
                 best = (c, q);
@@ -824,6 +1091,8 @@ struct SingleProblem<'a, 'j> {
     /// from the primary pair.
     partner: &'j [Vec3],
     ref_dir: &'j [Vec3],
+    /// Shots dropped by the pair phase; they contribute no residuals here either.
+    excluded: &'j [bool],
     gm_dot: f64,
 }
 
@@ -852,14 +1121,22 @@ impl SingleProblem<'_, '_> {
     }
 }
 
-/// The 24 signed axis permutations (proper and improper rotations by multiples of 90°), as
+/// The 24 proper rotations by multiples of 90° (signed axis permutations with determinant +1), as
 /// row-major 3×3 matrices.
+///
+/// Reflections are deliberately absent: every sensor is a right-handed triad, and the pair
+/// problem cannot tell a mirrored magnetometer frame from the true one (all its residuals are
+/// mirror-invariant), so a reflected start point would converge to an east/west-swapped
+/// calibration.
 const AXIS_MAPS: [[f64; 9]; 24] = {
     let mut maps = [[0.0; 9]; 24];
-    let perms: [[usize; 3]; 6] = [[0, 1, 2], [0, 2, 1], [1, 0, 2], [1, 2, 0], [2, 0, 1], [2, 1, 0]];
-    let signs: [[f64; 3]; 4] = [[1.0, 1.0, 1.0], [1.0, -1.0, -1.0], [-1.0, 1.0, -1.0], [-1.0, -1.0, 1.0]];
+    // Even permutations keep an even number of negative signs, odd permutations an odd number.
+    let perms: [[usize; 3]; 6] = [[0, 1, 2], [1, 2, 0], [2, 0, 1], [0, 2, 1], [1, 0, 2], [2, 1, 0]];
+    let even_signs: [[f64; 3]; 4] = [[1.0, 1.0, 1.0], [1.0, -1.0, -1.0], [-1.0, 1.0, -1.0], [-1.0, -1.0, 1.0]];
+    let odd_signs: [[f64; 3]; 4] = [[-1.0, -1.0, -1.0], [-1.0, 1.0, 1.0], [1.0, -1.0, 1.0], [1.0, 1.0, -1.0]];
     let mut i = 0;
     while i < 6 {
+        let signs = if i < 3 { even_signs } else { odd_signs };
         let mut j = 0;
         while j < 4 {
             let mut m = [0.0; 9];
@@ -882,6 +1159,9 @@ impl Problem<SINGLE_NP> for SingleProblem<'_, '_> {
     }
 
     fn residuals(&self, b: usize, p: &[f64; SINGLE_NP], out: &mut [f64; MAX_BLOCK_RESIDUALS]) -> usize {
+        if self.excluded[b] {
+            return 0;
+        }
         let model = unpack_full(p);
         let v = model.apply(self.raw(&self.shots[b]) * (1.0 / self.scale));
         let vn = v.norm();
@@ -1020,6 +1300,8 @@ struct Lm<const NP: usize> {
     lambda: f64,
     current: f64,
     iterations: u32,
+    /// Consecutive accepted steps whose relative improvement was below the tolerance.
+    small_steps: u32,
 }
 
 impl<const NP: usize> Lm<NP> {
@@ -1031,6 +1313,7 @@ impl<const NP: usize> Lm<NP> {
             lambda: 1e-3,
             current: f64::INFINITY,
             iterations: 0,
+            small_steps: 0,
         }
     }
 
@@ -1072,8 +1355,19 @@ impl<const NP: usize> Lm<NP> {
                 self.p = trial;
                 self.current = normal_equations(prob, &self.p, &mut self.jtj, &mut self.jtr);
                 self.lambda = (self.lambda / 3.0).max(1e-12);
-                if rel < opts.relative_tolerance || self.current < 1e-28 {
+                if self.current < 1e-28 {
                     return LmStep::Converged;
+                }
+                // A tiny improvement only counts as convergence when the step was essentially a
+                // Gauss-Newton step (small damping): a heavily damped step is short by construction
+                // and says nothing about the minimum. Three tiny steps in a row count regardless.
+                if rel < opts.relative_tolerance {
+                    self.small_steps += 1;
+                    if self.lambda < 1.0 || self.small_steps >= 3 {
+                        return LmStep::Converged;
+                    }
+                } else {
+                    self.small_steps = 0;
                 }
                 return LmStep::Continue;
             }
@@ -1245,9 +1539,9 @@ mod tests {
         }
         assert!((set.dip_deg - 63.0).abs() < 1e-4, "dip {}", set.dip_deg);
         assert!((set.field_ut - 48.0).abs() < 1.0, "field {}", set.field_ut);
-        // The primary accelerometer matrix must be upper triangular.
-        let m = set.acc[0].matrix.m;
-        assert!(m[1][0].abs() < 1e-15 && m[2][0].abs() < 1e-15 && m[2][1].abs() < 1e-15);
+        // The primary accelerometer matrix carries the roll gauge and is right-handed.
+        let m = set.acc[0].matrix;
+        assert!(m.m[2][1].abs() < 1e-15 && m.det() > 0.0);
     }
 
     #[test]

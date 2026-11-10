@@ -8,6 +8,8 @@ export interface CalibrationState {
   /** `slots[group][roll]`. */
   slots: SlotState[][];
   solved: CalSolved | null;
+  /** `true` once a slot changed after the last solve: per-shot residuals no longer apply. */
+  solvedStale: boolean;
   solving: boolean;
   pendingSet: boolean;
   storeId: number;
@@ -26,6 +28,7 @@ const initialState: CalibrationState = {
   sessionOpen: false,
   slots: emptySlots(),
   solved: null,
+  solvedStale: false,
   solving: false,
   pendingSet: false,
   storeId: Math.floor(Date.now() / 1000),
@@ -52,10 +55,12 @@ export const calibrationSlice = createSlice({
     slotDone(state, a: PayloadAction<CalShotReport>) {
       const row = state.slots[a.payload.shot.group];
       if (row) row[a.payload.shot.roll] = { status: "done", report: a.payload };
+      state.solvedStale = state.solved !== null;
     },
     slotFailed(state, a: PayloadAction<{ group: number; roll: number }>) {
       const row = state.slots[a.payload.group];
       if (row) row[a.payload.roll] = { status: "empty" };
+      state.solvedStale = state.solved !== null;
     },
     slotsReplaced(state, a: PayloadAction<CalShotReport[]>) {
       state.slots = emptySlots();
@@ -69,6 +74,7 @@ export const calibrationSlice = createSlice({
     },
     solvedReceived(state, a: PayloadAction<CalSolved>) {
       state.solved = a.payload;
+      state.solvedStale = false;
       state.solving = false;
       state.pendingSet = a.payload.error === null;
     },

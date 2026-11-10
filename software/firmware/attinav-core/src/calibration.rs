@@ -213,7 +213,7 @@ pub struct SensorSet {
     pub acc_temp_c: [f32; ACC_COUNT],
     /// Magnetometer models.
     pub mag: [Affine; MAG_COUNT],
-    /// Accelerometer models. `acc[0]` defines the body frame (upper-triangular matrix).
+    /// Accelerometer models. `acc[0]` carries the roll gauge (`matrix.m[2][1] == 0`).
     pub acc: [Affine; ACC_COUNT],
     /// Fitted magnetic dip at the calibration site, degrees (informational).
     pub dip_deg: f64,

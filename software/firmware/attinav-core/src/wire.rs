@@ -99,6 +99,10 @@ impl<'a> Writer<'a> {
     pub fn u32(&mut self, v: u32) -> Result<(), WireError> {
         self.bytes(&v.to_le_bytes())
     }
+    /// Appends a `u64`.
+    pub fn u64(&mut self, v: u64) -> Result<(), WireError> {
+        self.bytes(&v.to_le_bytes())
+    }
     /// Appends an `i32`.
     pub fn i32(&mut self, v: i32) -> Result<(), WireError> {
         self.bytes(&v.to_le_bytes())
@@ -190,6 +194,10 @@ impl<'a> Reader<'a> {
     /// Reads a `u32`.
     pub fn u32(&mut self) -> Result<u32, WireError> {
         Ok(u32::from_le_bytes(self.array()?))
+    }
+    /// Reads a `u64`.
+    pub fn u64(&mut self) -> Result<u64, WireError> {
+        Ok(u64::from_le_bytes(self.array()?))
     }
     /// Reads an `i32`.
     pub fn i32(&mut self) -> Result<i32, WireError> {

@@ -249,7 +249,7 @@ See `OTA.md` for the complete update procedure.
 |      0 |   12 | `mag_temp_c`   | 3 × `f32`, coil temperature of each triad when solved    |
 |     12 |    8 | `acc_temp_c`   | 2 × `f32`, die temperature of each accelerometer         |
 |     20 |  288 | `mag`          | 3 × `Affine`                                             |
-|    308 |  192 | `acc`          | 2 × `Affine` (`acc[0]` has an upper-triangular matrix)   |
+|    308 |  192 | `acc`          | 2 × `Affine` (`acc[0].matrix[2][1]` is 0: the roll gauge) |
 |    500 |    8 | `dip_deg`      | `f64`, fitted dip at the calibration site                |
 |    508 |    8 | `field_ut`     | `f64`, estimated field magnitude at the site             |
 |    516 |    4 | `residual_deg` | `f32`, RMS angular residual of the fit                   |
@@ -353,7 +353,7 @@ with `N` = magnetic north. See `attinav-core/src/survey.rs`.
 A `CalShot` with the same `(group, roll)` as a buffered one replaces it. The buffer holds 64 shots;
 the nominal procedure is 14 groups × 4 rolls.
 
-### `CalSolved` (43 bytes)
+### `CalSolved` (52 + 4·n bytes)
 
 | offset | size | field              |                                                       |
 |-------:|-----:|--------------------|-------------------------------------------------------|
@@ -366,9 +366,14 @@ the nominal procedure is 14 groups × 4 rolls.
 |     33 |    2 | `shots`            | `u16`                                                 |
 |     35 |    4 | `dip_deg`          | `f32`                                                 |
 |     39 |    4 | `field_ut`         | `f32`                                                 |
+|     43 |    8 | `excluded`         | `u64` bit mask: bit `i` set when buffered shot `i` was rejected as an outlier |
+|     51 |    1 | `n`                | number of per-shot residuals that follow (≤ 64)        |
+|     52 |  4·n | `shot_residual_deg`| `f32` per buffered shot (index order of `CalGetShots`): angle between its laser direction and its group mean in the pair fit; 0 for a shot alone in its group |
 
 On success the solved set is held as *pending* until `CalStore` writes it (or `CalBegin` /
 another `CalSolve` replaces it). `Abort` during a solve yields `error = 5` (`NotConverged`).
+Shots flagged in `excluded` were ignored by the fit (disturbed field or moved instrument); the
+host should show them and offer a retake, after which `CalSolve` can be repeated.
 
 ### `CalInfo` (102 bytes)
 
