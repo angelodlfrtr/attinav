@@ -18,3 +18,15 @@ This project is fully free and open-source.
 
 - Software components are licensed under AGPL-3.0
 - Hardware design files are licensed under CERN-OHL-S-2.0
+
+## Software
+
+A `Makefile` at the root delegates to both projects: `make check` runs every lint, test and build;
+`make -C software/firmware help` and `make -C software/client help` list the per-project targets.
+
+- `software/firmware` — Rust / Embassy firmware for the Rev B module (STM32U575): shot engine,
+  on-device calibration, host protocol over USB CDC and the carrier UART, OTA update with
+  rollback. See its `README.md`, `PROTOCOL.md` and `OTA.md`.
+- `software/client` — Tauri v2 desktop client (React, Redux, Tailwind) to test, calibrate,
+  visualise, configure and update the module; includes a protocol-level simulator so it runs
+  without hardware. See its `README.md`.
