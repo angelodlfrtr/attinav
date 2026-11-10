@@ -5,6 +5,9 @@
 FIRMWARE := software/firmware
 CLIENT   := software/client
 
+# Repository-level tools (workflow linters) come from the root flake.
+RUN := $(if $(IN_NIX_SHELL),,nix develop path:$(CURDIR) -c)
+
 .DEFAULT_GOAL := help
 
 .PHONY: help
@@ -71,10 +74,23 @@ client-lint: ## client tsc + eslint + clippy
 client-check: ## client: fmt-check, lint, test, build
 	$(MAKE) -C $(CLIENT) check
 
-# --- everything -------------------------------------------------------------------------------
+# --- repository ---------------------------------------------------------------------------------
+
+.PHONY: workflows
+workflows: ## actionlint and zizmor over the GitHub workflows
+	$(RUN) actionlint .github/workflows/*.yml
+	$(RUN) zizmor --no-progress .github/workflows/*.yml
+
+.PHONY: fmt-check
+fmt-check: ## fail if the root flake is not formatted
+	$(RUN) nixpkgs-fmt --check flake.nix
+
+# --- everything ---------------------------------------------------------------------------------
+
 
 .PHONY: fmt
-fmt: ## format both projects
+fmt: ## format both projects and the root flake
+	$(RUN) nixpkgs-fmt flake.nix
 	$(MAKE) -C $(FIRMWARE) fmt
 	$(MAKE) -C $(CLIENT) fmt
 
@@ -85,7 +101,7 @@ test: fw-test client-test ## all tests
 lint: fw-lint client-lint ## all linters
 
 .PHONY: check
-check: fw-check client-check ## everything CI would run, both projects
+check: workflows fmt-check fw-check client-check ## everything CI runs
 
 .PHONY: clean
 clean: ## drop build outputs of both projects

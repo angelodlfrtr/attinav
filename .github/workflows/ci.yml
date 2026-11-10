@@ -1,0 +1,106 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Every job runs the repository's own Makefile targets inside the matching Nix dev shell, so CI
+# and a developer's machine use the same toolchain, pinned by each flake.lock. Actions are pinned
+# by commit; the comment says which release that is.
+
+# A newer push to the same branch supersedes a run still in progress.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions: {}
+
+jobs:
+  workflows:
+    name: workflow lint (actionlint, zizmor)
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: DeterminateSystems/nix-installer-action@3138316df39ed29be04236d7ffc686fa525866aa # v23
+        with:
+          determinate: false
+          summarize: false
+          # Optimising the store replaces files with hard links into /nix/store/.links, which the
+          # cache archive does not carry, so a restored store comes back with those files missing.
+          extra-conf: auto-optimise-store = false
+      - uses: nix-community/cache-nix-action@7df957e333c1e5da7721f60227dbba6d06080569 # v7.0.2
+        with:
+          primary-key: nix-tools-${{ runner.os }}-${{ hashFiles('flake.lock') }}
+          restore-prefixes-first-match: nix-tools-${{ runner.os }}-
+      - run: nix develop --command make workflows
+
+  firmware:
+    name: firmware (fmt, clippy, tests, build)
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: DeterminateSystems/nix-installer-action@3138316df39ed29be04236d7ffc686fa525866aa # v23
+        with:
+          determinate: false
+          summarize: false
+          extra-conf: auto-optimise-store = false
+      - uses: nix-community/cache-nix-action@7df957e333c1e5da7721f60227dbba6d06080569 # v7.0.2
+        with:
+          primary-key: nix-firmware-${{ runner.os }}-${{ hashFiles('software/firmware/flake.lock') }}
+          restore-prefixes-first-match: nix-firmware-${{ runner.os }}-
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            software/firmware/target
+          key: cargo-firmware-${{ runner.os }}-${{ hashFiles('software/firmware/Cargo.lock') }}
+          restore-keys: cargo-firmware-${{ runner.os }}-
+      # One target per step, so a failure names itself in the log.
+      - run: nix develop ./software/firmware --command make -C software/firmware fmt-check
+      - run: nix develop ./software/firmware --command make -C software/firmware lint
+      - run: nix develop ./software/firmware --command make -C software/firmware test
+      - run: nix develop ./software/firmware --command make -C software/firmware build
+      - run: nix develop ./software/firmware --command make -C software/firmware boot
+      - run: nix develop ./software/firmware --command make -C software/firmware size
+
+  client:
+    name: client (fmt, tsc, eslint, clippy, tests, build)
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: DeterminateSystems/nix-installer-action@3138316df39ed29be04236d7ffc686fa525866aa # v23
+        with:
+          determinate: false
+          summarize: false
+          extra-conf: auto-optimise-store = false
+      - uses: nix-community/cache-nix-action@7df957e333c1e5da7721f60227dbba6d06080569 # v7.0.2
+        with:
+          primary-key: nix-client-${{ runner.os }}-${{ hashFiles('software/client/flake.lock') }}
+          restore-prefixes-first-match: nix-client-${{ runner.os }}-
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            ~/.npm
+            software/client/src-tauri/target
+          key: cargo-client-${{ runner.os }}-${{ hashFiles('software/client/src-tauri/Cargo.lock', 'software/client/package-lock.json') }}
+          restore-keys: cargo-client-${{ runner.os }}-
+      - run: nix develop ./software/client --command make -C software/client deps
+      - run: nix develop ./software/client --command make -C software/client fmt-check
+      - run: nix develop ./software/client --command make -C software/client lint
+      - run: nix develop ./software/client --command make -C software/client test
+      - run: nix develop ./software/client --command make -C software/client build

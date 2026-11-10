@@ -43,6 +43,9 @@ make -C software/firmware help
 make -C software/client help
 ```
 
+CI (`.github/workflows/ci.yml`) runs the same targets on every push and pull request, inside the
+same Nix shells, plus actionlint and zizmor over the workflows (`make workflows`, root flake).
+
 ## License
 
 - Software: AGPL-3.0-only
