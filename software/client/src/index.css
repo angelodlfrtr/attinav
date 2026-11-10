@@ -1,0 +1,123 @@
+@import "tailwindcss";
+
+/* Instrument-panel palette: near-black ground, cool greys, one cyan accent, amber/red for flags. */
+@theme {
+  --color-ground: #0b0f17;
+  --color-panel: #121826;
+  --color-panel-2: #182032;
+  --color-line: #243047;
+  --color-ink: #e6edf7;
+  --color-ink-2: #9fb0c8;
+  --color-ink-3: #66778f;
+  --color-accent: #38bdf8;
+  --color-accent-2: #0ea5e9;
+  --color-ok: #34d399;
+  --color-warn: #fbbf24;
+  --color-bad: #f87171;
+  --font-sans: "Inter", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", "Fira Code", ui-monospace, monospace;
+}
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  background: var(--color-ground);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+}
+
+input,
+select,
+textarea {
+  user-select: text;
+}
+
+.num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.card {
+  @apply rounded-lg border border-line bg-panel p-4;
+}
+
+.card-title {
+  @apply mb-3 text-xs font-semibold uppercase tracking-wider text-ink-3;
+}
+
+.btn {
+  @apply inline-flex items-center gap-2 rounded-md border border-line bg-panel-2 px-3 py-1.5 text-sm font-medium text-ink transition-colors;
+}
+.btn:hover:not(:disabled) {
+  @apply border-ink-3 bg-[#1f2a40];
+}
+.btn:disabled {
+  @apply cursor-not-allowed opacity-40;
+}
+.btn-primary {
+  @apply border-accent-2 bg-accent-2 text-[#06111a];
+}
+.btn-primary:hover:not(:disabled) {
+  @apply border-accent bg-accent;
+}
+.btn-danger {
+  @apply border-bad/60 text-bad;
+}
+.btn-danger:hover:not(:disabled) {
+  @apply bg-bad/10;
+}
+.btn-sm {
+  @apply px-2 py-1 text-xs;
+}
+
+.input {
+  @apply w-full rounded-md border border-line bg-ground px-2 py-1.5 text-sm text-ink outline-none;
+}
+.input:focus {
+  @apply border-accent;
+}
+.input-invalid {
+  @apply border-bad;
+}
+
+.label {
+  @apply mb-1 block text-xs text-ink-2;
+}
+
+.badge {
+  @apply inline-flex items-center rounded px-1.5 py-0.5 text-[11px] font-medium leading-none;
+}
+
+.table {
+  @apply w-full text-left text-sm;
+}
+.table th {
+  @apply border-b border-line px-2 py-1.5 text-xs font-semibold uppercase tracking-wide text-ink-3;
+}
+.table td {
+  @apply border-b border-line/60 px-2 py-1.5;
+}
+.table tr:hover td {
+  @apply bg-panel-2;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-line);
+  border-radius: 5px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}

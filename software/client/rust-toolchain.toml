@@ -1,0 +1,5 @@
+# Same channel as the firmware so `attinav-core` compiles identically on both sides.
+[toolchain]
+channel = "1.99.1"
+components = ["rust-src", "rustfmt", "clippy", "rust-analyzer"]
+profile = "minimal"

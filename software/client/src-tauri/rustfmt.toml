@@ -1,0 +1,2 @@
+# Same width as the firmware, which this crate shares code with.
+max_width = 120
