@@ -21,3 +21,18 @@
 (rule "fine_pitch_pad_to_pad_U10"
     (condition "A.Type == 'Pad' && B.Type == 'Pad' && A.memberOfFootprint('U10') && B.memberOfFootprint('U10')")
     (constraint clearance (min 0.15mm)))
+
+# Track-to-pad clearance next to the same 0.4 mm-pitch MLF pads: a 0.2 mm exit
+# trace leaving one pad passes its neighbours at 0.175 mm. Same JLCPCB-safe floor.
+
+(rule "fine_pitch_track_to_pad_U2"
+    (condition "A.Type == 'Track' && B.Type == 'Pad' && B.memberOfFootprint('U2')")
+    (constraint clearance (min 0.15mm)))
+
+(rule "fine_pitch_track_to_pad_U4"
+    (condition "A.Type == 'Track' && B.Type == 'Pad' && B.memberOfFootprint('U4')")
+    (constraint clearance (min 0.15mm)))
+
+(rule "fine_pitch_track_to_pad_U6"
+    (condition "A.Type == 'Track' && B.Type == 'Pad' && B.memberOfFootprint('U6')")
+    (constraint clearance (min 0.15mm)))
