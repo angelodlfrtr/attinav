@@ -1,0 +1,31 @@
+# Firmware is the default build product, so the default target is the Cortex-M33 (FPv5-SP).
+# The pure libraries are tested on the host through the `test-host` alias below.
+[build]
+target = "thumbv8m.main-none-eabihf"
+
+[target.thumbv8m.main-none-eabihf]
+# `cargo run --release` flashes and streams defmt logs through the Tag-Connect SWD pads.
+runner = "probe-rs run --chip STM32U575RG"
+rustflags = [
+  # flip-link puts the stack below .data/.bss so an overflow faults instead of corrupting state.
+  # Linker scripts and --nmagic are added per binary by its build.rs (different memory maps).
+  "-C", "linker=flip-link",
+]
+
+[alias]
+# Host-side unit tests of the hardware-independent crates.
+test-host = "test --target x86_64-unknown-linux-gnu --workspace --exclude attinav-fw --exclude attinav-boot --features attinav-core/std"
+# Clippy (pedantic groups enabled workspace-wide) on the firmware and, for the host, on the libraries.
+# No --all-targets here: test targets pull std-only dev-dependencies (embedded-hal-mock) that cannot
+# build for thumb; the libraries' tests are linted by `lint-host`.
+lint = "clippy --workspace -- -D warnings"
+lint-host = "clippy --target x86_64-unknown-linux-gnu --workspace --exclude attinav-fw --exclude attinav-boot --all-targets --features attinav-core/std -- -D warnings"
+# Flash image size summary.
+fw-size = "size --release -- -A"
+# Raw application image for an over-the-air update (host tooling feeds this to FwBegin/FwChunk).
+fw-bin = "objcopy --release -p attinav-fw -- -O binary target/attinav-fw.bin"
+# Build and flash the bootloader (once per board, or when the flash map changes).
+boot-flash = "run --release -p attinav-boot"
+
+[env]
+DEFMT_LOG = "info"

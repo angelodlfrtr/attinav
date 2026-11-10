@@ -1,0 +1,37 @@
+[package]
+name = "attinav-fw"
+description = "Attinav Rev B firmware for the STM32U575RGT6 (Embassy): shot engine, host protocol over USB CDC and the carrier UART, on-device calibration, OTA staging"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish = false
+
+[dependencies]
+attinav-core = { workspace = true, features = ["defmt"] }
+attinav-sensors = { workspace = true, features = ["defmt"] }
+
+embassy-stm32 = { workspace = true }
+embassy-executor = { workspace = true }
+embassy-time = { workspace = true }
+embassy-usb = { workspace = true }
+embassy-sync = { workspace = true }
+embassy-futures = { workspace = true }
+embassy-embedded-hal = { workspace = true }
+embassy-boot-stm32 = { version = "0.8.0", features = ["defmt"] }
+embassy-boot = "0.7.0"
+embedded-storage-async = "0.4.2"
+
+embedded-hal = { workspace = true }
+embedded-hal-async = { workspace = true }
+
+defmt = { workspace = true }
+defmt-rtt = { workspace = true }
+panic-probe = { workspace = true }
+cortex-m = { workspace = true }
+cortex-m-rt = { workspace = true }
+static_cell = { workspace = true }
+
+[lints]
+workspace = true

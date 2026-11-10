@@ -1,0 +1,26 @@
+[package]
+name = "attinav-sensors"
+description = "Async embedded-hal drivers for the Attinav sensors: PNI RM3100, Murata SCA3300, TDK ICM-42688-P"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[features]
+default = []
+defmt = ["dep:defmt"]
+std = []
+
+[dependencies]
+embedded-hal = { workspace = true }
+embedded-hal-async = { workspace = true }
+libm = { workspace = true }
+defmt = { workspace = true, optional = true }
+
+[dev-dependencies]
+embedded-hal-mock = { version = "0.11", default-features = false, features = ["eh1", "embedded-hal-async"] }
+tokio = { version = "1", features = ["macros", "rt"] }
+
+[lints]
+workspace = true

@@ -1,0 +1,85 @@
+[workspace]
+resolver = "2"
+members = ["attinav-core", "attinav-sensors", "attinav-fw", "attinav-boot"]
+# `cargo build` / `cargo run` at the root act on the firmware binary; the libraries are its
+# dependencies and are tested on the host with `cargo test-host` (see .cargo/config.toml).
+default-members = ["attinav-fw"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "AGPL-3.0-only"
+repository = "https://github.com/neolut/attinav"
+authors = ["Angelo Delefortrie <angelo@neolut.com>"]
+
+[workspace.dependencies]
+attinav-core = { path = "attinav-core", default-features = false }
+attinav-sensors = { path = "attinav-sensors", default-features = false }
+
+embassy-stm32 = { version = "0.6.0", features = ["stm32u575rg", "defmt", "time-driver-any", "exti", "dual-bank", "unstable-pac"] }
+embassy-executor = { version = "0.10.0", features = ["platform-cortex-m", "executor-thread", "defmt"] }
+embassy-time = { version = "0.5.1", features = ["defmt", "defmt-timestamp-uptime", "tick-hz-32_768"] }
+embassy-usb = { version = "0.6.0", features = ["defmt"] }
+embassy-sync = { version = "0.8.0", features = ["defmt"] }
+embassy-futures = "0.1.2"
+embassy-embedded-hal = { version = "0.6.0", default-features = false }
+
+embedded-hal = "1.0"
+embedded-hal-async = "1.0"
+
+defmt = "1.1"
+defmt-rtt = "1.0"
+panic-probe = { version = "1.0", features = ["print-defmt"] }
+cortex-m = { version = "0.7.7", features = ["inline-asm", "critical-section-single-core"] }
+cortex-m-rt = "0.7.5"
+static_cell = "2.1"
+libm = "0.2"
+
+[workspace.lints.rust]
+missing_docs = "warn"
+unsafe_op_in_unsafe_fn = "warn"
+
+[workspace.lints.clippy]
+# Pedantic baseline for the whole workspace; each crate opts back out of the handful of lints that
+# are noise for numerical / embedded code (see the per-crate `[lints]` tables).
+pedantic = { level = "warn", priority = -1 }
+nursery = { level = "warn", priority = -1 }
+cargo = { level = "warn", priority = -1 }
+undocumented_unsafe_blocks = "warn"
+missing_safety_doc = "warn"
+# Float comparisons, casts and precision loss are deliberate and reviewed in this code base.
+float_cmp = "allow"
+cast_precision_loss = "allow"
+cast_possible_truncation = "allow"
+cast_sign_loss = "allow"
+cast_lossless = "allow"
+# Short names (`g`, `m`, `b`) are the standard notation in the calibration maths.
+many_single_char_names = "allow"
+similar_names = "allow"
+# Hardware register and protocol code is full of literal field layouts.
+unreadable_literal = "allow"
+module_name_repetitions = "allow"
+# Every fallible function returns one of the crate's documented error enums (`WireError`,
+# `SolveError`, driver errors); per-function `# Errors` sections would only repeat the enum docs.
+missing_errors_doc = "allow"
+# `mul_add` is not available in `core` (no FMA intrinsic without std); the plain expressions stay.
+suboptimal_flops = "allow"
+# Index-coupled loops over matrices and parallel arrays read better with explicit indices.
+needless_range_loop = "allow"
+# `cargo` lint group: the workspace is private and never published.
+multiple_crate_versions = "allow"
+cargo_common_metadata = "allow"
+
+[profile.release]
+debug = 2          # defmt needs symbols; they never reach the flash image.
+lto = "fat"
+opt-level = "s"
+codegen-units = 1
+incremental = false
+
+[profile.dev]
+# Soft-float f64 in the solver and the SPI drivers are unusable at opt-level 0; keep debug info.
+opt-level = 1
+debug = 2
+lto = false
+incremental = true

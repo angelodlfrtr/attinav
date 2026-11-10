@@ -1,0 +1,28 @@
+[package]
+name = "attinav-core"
+description = "Hardware-independent core of the Attinav firmware: calibration model and solver, survey maths, quality flags, host protocol codec and flash record format"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[features]
+default = []
+# Host builds: pulls in std for the tests and lets the desktop tooling use `std::error::Error`.
+std = ["serde?/std"]
+# Pretty-printing of every public type through defmt (firmware builds).
+defmt = ["dep:defmt"]
+# serde derives on the protocol and calibration types (desktop tooling; JSON export).
+serde = ["dep:serde"]
+
+[dependencies]
+libm = { workspace = true }
+defmt = { workspace = true, optional = true }
+serde = { version = "1.0", default-features = false, features = ["derive"], optional = true }
+
+[dev-dependencies]
+# The tests run on the host only (`cargo test-host`).
+
+[lints]
+workspace = true

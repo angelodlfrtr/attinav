@@ -1,0 +1,2 @@
+# The code base is written at 120 columns (register tables, doc tables, long builder chains).
+max_width = 120

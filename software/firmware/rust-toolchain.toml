@@ -1,0 +1,7 @@
+# Pinned toolchain. `nix develop` builds exactly this via rust-overlay; plain rustup users get
+# the same thing automatically.
+[toolchain]
+channel = "1.99.1"
+components = ["rust-src", "rustfmt", "clippy", "rust-analyzer", "llvm-tools-preview"]
+targets = ["thumbv8m.main-none-eabihf"]
+profile = "minimal"
