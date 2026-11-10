@@ -41,12 +41,14 @@ typecheck: node_modules ## tsc --noEmit
 eslint: node_modules ## eslint over src/
 	$(RUN) npx eslint src
 
+# `tauri::generate_context!` embeds dist/ at compile time, so every Rust build needs the frontend
+# built first (a clean checkout has no dist/).
 .PHONY: lint
-lint: typecheck eslint ## tsc + eslint on the frontend, clippy on the Rust side
+lint: typecheck eslint frontend ## tsc + eslint on the frontend, clippy on the Rust side
 	cd src-tauri && $(CARGO) lint
 
 .PHONY: test
-test: ## Rust unit and end-to-end tests (link + simulator through the real protocol)
+test: frontend ## Rust unit and end-to-end tests (link + simulator through the real protocol)
 	cd src-tauri && $(CARGO) test
 
 .PHONY: fmt
