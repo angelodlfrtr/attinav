@@ -6,7 +6,6 @@
 //! * **Firmware updates**: chunks are written to the DFU partition through `embassy-boot`'s
 //!   [`FirmwareUpdater`]; after the CRC check the image is marked for swap and the MCU resets.
 
-use defmt::{info, warn};
 use embassy_boot::FirmwareUpdaterError;
 use embassy_boot_stm32::{AlignedBuffer, FirmwareUpdater, FirmwareUpdaterConfig, State};
 use embassy_embedded_hal::adapter::BlockingAsync;
@@ -126,13 +125,13 @@ impl Store {
         let _ = ecc::take_fault();
         for (i, slot) in [Slot::A, Slot::B].into_iter().enumerate() {
             if flash.read(slot_offset(slot), &mut bufs[i]).await.is_err() {
-                warn!("store: read of slot {:?} failed", slot);
+                host_warn!("store: read of slot {:?} failed", slot);
                 continue;
             }
             if ecc::take_fault() {
                 // Torn write: the slot holds a half-programmed quad-word. It is the older slot
                 // (the newer one was written completely) and the next `save` erases it.
-                warn!("store: ECC fault reading slot {:?}, ignoring it", slot);
+                host_warn!("store: ECC fault reading slot {:?}, ignoring it", slot);
                 continue;
             }
             infos[i] = decode_record(&bufs[i]).map(|(info, _)| info);
@@ -147,9 +146,12 @@ impl Store {
         let cal = Calibration::read(&mut r).ok()?;
         self.seq = info.seq;
         self.current = Some(slot);
-        info!(
+        host_info!(
             "store: loaded record seq {} from slot {:?} (cal id {}, {} sets)",
-            info.seq, slot, cal.id, cal.n_sets
+            info.seq,
+            slot,
+            cal.id,
+            cal.n_sets
         );
         Some((config, cal))
     }
@@ -191,7 +193,7 @@ impl Store {
         drop(flash);
         self.seq = seq;
         self.current = Some(target);
-        info!("store: saved record seq {} to slot {:?} ({} bytes)", seq, target, len);
+        host_info!("store: saved record seq {} to slot {:?} ({} bytes)", seq, target, len);
         Ok(())
     }
 }
@@ -264,11 +266,20 @@ impl FwUpdate {
     pub async fn mark_booted(&mut self) {
         match self.updater.get_state().await {
             Ok(State::Swap) => match self.updater.mark_booted().await {
-                Ok(()) => info!("fw: trial image confirmed"),
-                Err(e) => warn!("fw: mark_booted failed: {:?}", defmt::Debug2Format(&e)),
+                Ok(()) => host_info!("fw: trial image confirmed"),
+                Err(e) => {
+                    defmt::warn!("fw: mark_booted failed: {:?}", defmt::Debug2Format(&e));
+                    crate::hostlog::emit(1, format_args!("fw: mark_booted failed: {e:?}"));
+                }
             },
-            Ok(s) => info!("fw: boot state {:?}", defmt::Debug2Format(&s)),
-            Err(e) => warn!("fw: cannot read boot state: {:?}", defmt::Debug2Format(&e)),
+            Ok(s) => {
+                defmt::info!("fw: boot state {:?}", defmt::Debug2Format(&s));
+                crate::hostlog::emit(2, format_args!("fw: boot state {s:?}"));
+            }
+            Err(e) => {
+                defmt::warn!("fw: cannot read boot state: {:?}", defmt::Debug2Format(&e));
+                crate::hostlog::emit(1, format_args!("fw: cannot read boot state: {e:?}"));
+            }
         }
     }
 
@@ -289,9 +300,11 @@ impl FwUpdate {
             crc32: b.crc32,
             received: 0,
         });
-        info!(
+        host_info!(
             "fw: update begin, {} bytes, crc {:#010x}, version {:?}",
-            b.size, b.crc32, b.version
+            b.size,
+            b.crc32,
+            b.version
         );
         Ok(())
     }
@@ -346,22 +359,22 @@ impl FwUpdate {
         }
         let crc = crc.finish();
         if ecc::take_fault() {
-            warn!("fw: ECC fault while reading back the staged image");
+            host_warn!("fw: ECC fault while reading back the staged image");
             return Err(UpdateError::Crc);
         }
         if crc != s.crc32 {
-            warn!("fw: crc mismatch {:#010x} != {:#010x}", crc, s.crc32);
+            host_warn!("fw: crc mismatch {:#010x} != {:#010x}", crc, s.crc32);
             return Err(UpdateError::Crc);
         }
         self.updater.mark_updated().await.map_err(|e| map_updater_error(&e))?;
-        info!("fw: image verified and marked for swap");
+        host_info!("fw: image verified and marked for swap");
         Ok(())
     }
 
     /// Drops the session (staged bytes are simply overwritten by the next one).
     pub fn abort(&mut self) {
         if self.session.take().is_some() {
-            info!("fw: update aborted");
+            host_info!("fw: update aborted");
         }
     }
 

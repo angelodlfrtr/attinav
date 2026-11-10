@@ -140,7 +140,7 @@ after a known payload layout are ignored (forward compatibility).
 | `0xA2` | `CalSolved`   | `CalSolved`         | reply to `CalSolve`                                    |
 | `0xA3` | `CalData`     | `Calibration`       | reply to `CalGet`                                      |
 | `0xA4` | `CalInfo`     | `CalInfo`           | reply to `CalInfo`                                     |
-| `0xF0` | `Log`         | `LogLine`           | unsolicited (reserved; defmt is the primary log path)  |
+| `0xF0` | `Log`         | `LogLine`           | unsolicited: warnings and state changes from the engine (sensor faults, flash, update, solve) |
 | `0xF1` | `Event`       | `Event`             | unsolicited                                            |
 
 ## 5. Host payloads
@@ -413,7 +413,11 @@ them only on the UART. `GetInfo` carries the same information.
 
 ### `LogLine` (1 + ≤ 96 bytes)
 
-`level:u8` (0 error, 1 warn, 2 info, 3 debug) followed by UTF-8 text.
+`level:u8` (0 error, 1 warn, 2 info, 3 debug) followed by UTF-8 text (≤ 96 bytes, cut on a
+character boundary). The firmware mirrors its defmt `warn` and selected `info` records here so a
+host sees sensor faults, flash errors and update progress without a debug probe; frames from the
+link layer itself (dropped frames, USB state) are never forwarded. Sent with `seq = 0` on every
+connected link, dropped when a queue is full.
 
 ## 7. Quality flags
 

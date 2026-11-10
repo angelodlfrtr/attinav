@@ -84,6 +84,8 @@ function handleMessage(store: AppStore, seq: number, m: DeviceMessage): void {
       break;
     case "Log":
       store.dispatch(consoleActions.logged({ direction: "sys", seq, kind: "Log", summary: m.data.text, json: "" }));
+      // Device warnings and errors deserve attention outside the console.
+      if (m.data.level <= 1) store.dispatch(toast({ level: m.data.level === 0 ? "error" : "info", text: `device: ${m.data.text}` }));
       break;
     default:
       break;

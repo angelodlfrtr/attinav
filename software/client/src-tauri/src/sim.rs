@@ -15,8 +15,8 @@ use attinav_core::calibration::{ACC_COUNT, Affine, Calibration, MAG_COUNT, Senso
 use attinav_core::math::{Mat3, Vec3, deg_to_rad};
 use attinav_core::protocol::{
     self, CalInfo, CalSetSummary, CalShotReport, CalSolved, DeviceConfig, DeviceMessage, Event, EventKind,
-    FIRMWARE_VERSION, HostMessage, Info, MAX_ENCODED, Sample, ShotRaw, ShotRequest, ShotResult, Status, StreamRequest,
-    Temps, host_kind, sample_source, shot_flags, stream_sensors,
+    FIRMWARE_VERSION, HostMessage, Info, LogLine, MAX_ENCODED, Sample, ShotRaw, ShotRequest, ShotResult, Status,
+    StreamRequest, Temps, host_kind, sample_source, shot_flags, stream_sensors,
 };
 use attinav_core::quality::{self, FieldReference, QualityFlags, ShotInput};
 use attinav_core::solver::{self, CalShot, ShotBuffer, SolveOptions};
@@ -299,6 +299,21 @@ impl Simulator {
             EventKind::Boot,
             u32::from(self.boot_state) << 8 | u32::from(ctl.sensors_ok),
         )];
+        // The firmware mirrors its state-change logs to the host; do the same so the client's
+        // console and toasts can be exercised without hardware.
+        out.push((
+            0,
+            DeviceMessage::Log(LogLine::new(2, "sim: no stored state, using defaults")),
+        ));
+        for k in 0..6u8 {
+            if ctl.sensors_ok & (1 << k) == 0 {
+                let name = ["mag1", "mag2", "mag3", "acc1", "acc2", "imu"][usize::from(k)];
+                out.push((
+                    0,
+                    DeviceMessage::Log(LogLine::new(1, &format!("{name}: probe failed BadId(0)"))),
+                ));
+            }
+        }
         out.push(if self.cal.is_empty() {
             Self::event(EventKind::CalibrationMissing, 0)
         } else {

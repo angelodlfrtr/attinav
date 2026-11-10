@@ -5,7 +5,7 @@
 //! inbound queue between steps so an `Abort` is honoured and other requests get a `Busy` reply
 //! instead of waiting.
 
-use defmt::{info, warn};
+use defmt::info;
 use embassy_futures::join::join;
 use embassy_futures::select::{Either3, select3};
 use embassy_futures::yield_now;
@@ -193,6 +193,17 @@ impl Engine {
         }
     }
 
+    /// Writes configuration and calibration to flash and reports the outcome as a reply status.
+    async fn persist(&mut self) -> Status {
+        match self.store.save(&self.config, &self.cal).await {
+            Ok(()) => Status::Ok,
+            Err(e) => {
+                host_error!("store: save failed: {:?}", e);
+                Status::FlashError
+            }
+        }
+    }
+
     /// Programs `cycle_count` into the triads when it differs from the current one; `false` when a
     /// working triad refused it (the shot would then be mis-scaled).
     async fn apply_cycle_count(&mut self, cycle_count: u16) -> bool {
@@ -236,11 +247,11 @@ impl Engine {
         let msg = match HostMessage::read_payload(kind, req.payload()) {
             Ok(m) => m,
             Err(WireError::Invalid) if !host_kind_known(kind) => {
-                warn!("unknown request kind {:#04x}", kind);
+                host_warn!("unknown request kind {:#04x}", kind);
                 return ack(link, seq, kind, Status::Unsupported, 0).await;
             }
             Err(e) => {
-                warn!("bad payload for {:#04x}: {:?}", kind, e);
+                host_warn!("bad payload for {:#04x}: {:?}", kind, e);
                 return ack(link, seq, kind, Status::BadPayload, 0).await;
             }
         };
@@ -309,18 +320,12 @@ impl Engine {
             HostMessage::CalGet => link::send(link, &DeviceMessage::CalData(self.cal), seq).await,
             HostMessage::CalSet(cal) => {
                 self.cal = cal;
-                let status = match self.store.save(&self.config, &self.cal).await {
-                    Ok(()) => Status::Ok,
-                    Err(_) => Status::FlashError,
-                };
+                let status = self.persist().await;
                 ack(link, seq, kind, status, 0).await;
             }
             HostMessage::CalClear => {
                 self.cal = Calibration::empty(self.config.mag_cycle_count);
-                let status = match self.store.save(&self.config, &self.cal).await {
-                    Ok(()) => Status::Ok,
-                    Err(_) => Status::FlashError,
-                };
+                let status = self.persist().await;
                 ack(link, seq, kind, status, 0).await;
             }
             HostMessage::CalInfo => {
@@ -366,7 +371,7 @@ impl Engine {
                 };
                 ack(link, seq, kind, status, 0).await;
                 if status == Status::Ok {
-                    info!("fw: rebooting into the new image");
+                    host_info!("fw: rebooting into the new image");
                     Timer::after_millis(200).await;
                     cortex_m::peripheral::SCB::sys_reset();
                 }
@@ -429,10 +434,7 @@ impl Engine {
             return ack(link, seq, host_kind::SET_CONFIG, Status::SensorError, 0).await;
         }
         self.config = c;
-        let status = match self.store.save(&self.config, &self.cal).await {
-            Ok(()) => Status::Ok,
-            Err(_) => Status::FlashError,
-        };
+        let status = self.persist().await;
         ack(link, seq, host_kind::SET_CONFIG, status, 0).await;
     }
 
@@ -854,7 +856,7 @@ impl Engine {
             }
         };
         self.led(false);
-        info!("solve: {} steps in {} ms", steps, started.elapsed().as_millis());
+        host_info!("solve: {} steps in {} ms", steps, started.elapsed().as_millis());
         let msg = match result {
             Ok((set, report)) => {
                 self.pending_set = Some(set);
@@ -884,10 +886,7 @@ impl Engine {
         let idx = self.cal.upsert_set(set, 5.0);
         self.cal.id = id;
         self.cal.date_unix = self.unix_now();
-        let status = match self.store.save(&self.config, &self.cal).await {
-            Ok(()) => Status::Ok,
-            Err(_) => Status::FlashError,
-        };
+        let status = self.persist().await;
         ack(link, seq, host_kind::CAL_STORE, status, idx as u16).await;
     }
 }

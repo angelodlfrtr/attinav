@@ -20,6 +20,9 @@
     reason = "tasks are statically allocated by embassy-executor and the main stack is sized for the engine"
 )]
 
+#[macro_use]
+mod hostlog;
+
 mod board;
 mod ecc;
 mod engine;
@@ -50,11 +53,11 @@ async fn main(spawner: Spawner) {
     let (config, calibration) = match store.load().await {
         Some((config, cal)) if config.is_valid() => (config, cal),
         Some((_, cal)) => {
-            info!("stored configuration invalid, using defaults");
+            host_info!("stored configuration invalid, using defaults");
             (DeviceConfig::default(), cal)
         }
         None => {
-            info!("no stored state, using defaults");
+            host_info!("no stored state, using defaults");
             let config = DeviceConfig::default();
             (config, Calibration::empty(config.mag_cycle_count))
         }

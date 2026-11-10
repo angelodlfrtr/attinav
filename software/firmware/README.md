@@ -116,7 +116,9 @@ image as invalid instead of resetting in a loop.
 
 ## Logging
 
-defmt over RTT (`cargo run --release`, `DEFMT_LOG=debug` in the shell). `info` for state
+defmt over RTT (`cargo run --release`, `DEFMT_LOG=debug` in the shell). Engine-side `warn` and
+state-change `info` records are also sent to the host as `Log` frames (`hostlog.rs`), so the
+client console shows sensor faults and flash or update problems without a probe attached. `info` for state
 transitions, `warn` for every sensor or flash problem, `debug` for dropped frames. Nothing in the
 shot path allocates or panics on bad input; the only panics left are `StaticCell` double-inits
 (programming errors) and `unwrap!` on task spawning.

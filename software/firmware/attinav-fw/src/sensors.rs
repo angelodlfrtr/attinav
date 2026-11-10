@@ -4,7 +4,6 @@
 //! This module owns the hardware access patterns (power sequencing, data-ready waits, pipelined
 //! reads); the shot logic that decides *what* to acquire lives in the engine.
 
-use defmt::{info, warn};
 use embassy_futures::join::join;
 use embassy_stm32::adc::{Adc, AnyAdcChannel, SampleTime, VrefInt};
 use embassy_stm32::exti::ExtiInput;
@@ -108,12 +107,12 @@ impl Mags {
                     dev.set_cycle_count(cycle_count).await.is_ok()
                 }
                 Err(e) => {
-                    warn!("mag{}: probe failed {:?}", i + 1, e);
+                    host_warn!("mag{}: probe failed {:?}", i + 1, e);
                     false
                 }
             };
         }
-        info!("mags ok: {:?}", self.ok);
+        host_info!("mags ok: {:?}", self.ok);
         self.ok
     }
 
@@ -137,7 +136,7 @@ impl Mags {
         let mut all = true;
         for (i, dev) in self.dev.iter_mut().enumerate() {
             if self.ok[i] && dev.set_cycle_count(cycle_count).await.is_err() {
-                warn!("mag{}: cycle count write failed", i + 1);
+                host_warn!("mag{}: cycle count write failed", i + 1);
                 all = false;
             }
         }
@@ -150,7 +149,7 @@ impl Mags {
         for (i, dev) in self.dev.iter_mut().enumerate() {
             if active[i] && dev.start_single().await.is_err() {
                 self.fault[i] = true;
-                warn!("mag{}: poll write failed", i + 1);
+                host_warn!("mag{}: poll write failed", i + 1);
             }
         }
     }
@@ -176,14 +175,14 @@ impl Mags {
                 continue;
             }
             if !ready[i] {
-                warn!("mag{}: DRDY timeout", i + 1);
+                host_warn!("mag{}: DRDY timeout", i + 1);
                 self.fault[i] = true;
                 continue;
             }
             match self.dev[i].read_measurement().await {
                 Ok(m) => out[i] = Some(Vec3::new(f64::from(m.x), f64::from(m.y), f64::from(m.z))),
                 Err(e) => {
-                    warn!("mag{}: read failed {:?}", i + 1, e);
+                    host_warn!("mag{}: read failed {:?}", i + 1, e);
                     self.fault[i] = true;
                 }
             }
@@ -245,7 +244,7 @@ impl Accels {
             self.ok[i] = match a.init(sca3300::Mode::Mode4).await {
                 Ok(()) => true,
                 Err(e) => {
-                    warn!("acc{}: init failed {:?}", i + 1, e);
+                    host_warn!("acc{}: init failed {:?}", i + 1, e);
                     false
                 }
             };
@@ -253,11 +252,11 @@ impl Accels {
         self.imu_ok = match self.imu.init(icm42688::Config::default()).await {
             Ok(()) => true,
             Err(e) => {
-                warn!("imu: init failed {:?}", e);
+                host_warn!("imu: init failed {:?}", e);
                 false
             }
         };
-        info!("accels ok: {:?}, imu ok: {}", self.ok, self.imu_ok);
+        host_info!("accels ok: {:?}, imu ok: {}", self.ok, self.imu_ok);
         (self.ok, self.imu_ok)
     }
 
@@ -275,7 +274,7 @@ impl Accels {
                         sca3300::temp_celsius(s.temp),
                     ));
                 }
-                Err(e) => warn!("acc{}: read failed {:?}", i + 1, e),
+                Err(e) => host_warn!("acc{}: read failed {:?}", i + 1, e),
             }
         }
         out
@@ -294,7 +293,7 @@ impl Accels {
                 temp_c: s.temp_celsius(),
             }),
             Err(e) => {
-                warn!("imu: read failed {:?}", e);
+                host_warn!("imu: read failed {:?}", e);
                 None
             }
         }
